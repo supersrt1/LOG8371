@@ -25,7 +25,6 @@ import de.danoeh.antennapod.core.event.FeedListUpdateEvent;
 import de.danoeh.antennapod.core.event.PlaybackPositionEvent;
 import de.danoeh.antennapod.core.event.PlayerStatusEvent;
 import de.danoeh.antennapod.core.event.UnreadItemsUpdateEvent;
-import de.danoeh.antennapod.core.menuhandler.MenuItemUtils;
 import de.danoeh.antennapod.view.EpisodeItemListRecyclerView;
 import de.danoeh.antennapod.view.viewholder.EpisodeItemViewHolder;
 import org.greenrobot.eventbus.EventBus;
@@ -41,13 +40,14 @@ import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
 import de.danoeh.antennapod.core.event.DownloadEvent;
 import de.danoeh.antennapod.core.event.DownloaderUpdate;
 import de.danoeh.antennapod.core.event.FeedItemEvent;
-import de.danoeh.antennapod.model.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.service.download.DownloadService;
 import de.danoeh.antennapod.core.storage.DBWriter;
 import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.FeedItemUtil;
 import de.danoeh.antennapod.core.util.download.AutoUpdateManager;
 import de.danoeh.antennapod.menuhandler.FeedItemMenuHandler;
+import de.danoeh.antennapod.menuhandler.MenuItemUtils;
 import de.danoeh.antennapod.view.EmptyViewHandler;
 import io.reactivex.Observable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -121,67 +121,67 @@ public abstract class EpisodesListFragment extends Fragment {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        if (super.onOptionsItemSelected(item)) {
+        if (!super.onOptionsItemSelected(item)) {
+            switch (item.getItemId()) {
+                case R.id.refresh_item:
+                    AutoUpdateManager.runImmediate(requireContext());
+                    return true;
+                case R.id.mark_all_read_item:
+                    ConfirmationDialog markAllReadConfirmationDialog = new ConfirmationDialog(getActivity(),
+                            R.string.mark_all_read_label,
+                            R.string.mark_all_read_confirmation_msg) {
+
+                        @Override
+                        public void onConfirmButtonPressed(DialogInterface dialog) {
+                            dialog.dismiss();
+                            DBWriter.markAllItemsRead();
+                            ((MainActivity) getActivity()).showSnackbarAbovePlayer(
+                                    R.string.mark_all_read_msg, Toast.LENGTH_SHORT);
+                        }
+                    };
+                    markAllReadConfirmationDialog.createNewDialog().show();
+                    return true;
+                case R.id.remove_all_new_flags_item:
+                    ConfirmationDialog removeAllNewFlagsConfirmationDialog = new ConfirmationDialog(getActivity(),
+                            R.string.remove_all_new_flags_label,
+                            R.string.remove_all_new_flags_confirmation_msg) {
+
+                        @Override
+                        public void onConfirmButtonPressed(DialogInterface dialog) {
+                            dialog.dismiss();
+                            DBWriter.removeAllNewFlags();
+                            ((MainActivity) getActivity()).showSnackbarAbovePlayer(
+                                    R.string.removed_all_new_flags_msg, Toast.LENGTH_SHORT);
+                        }
+                    };
+                    removeAllNewFlagsConfirmationDialog.createNewDialog().show();
+                    return true;
+                default:
+                    return false;
+            }
+        } else {
             return true;
         }
-        final int itemId = item.getItemId();
-        if (itemId == R.id.refresh_item) {
-            AutoUpdateManager.runImmediate(requireContext());
-            return true;
-        } else if (itemId == R.id.mark_all_read_item) {
-            ConfirmationDialog markAllReadConfirmationDialog = new ConfirmationDialog(getActivity(),
-                    R.string.mark_all_read_label,
-                    R.string.mark_all_read_confirmation_msg) {
-
-                @Override
-                public void onConfirmButtonPressed(DialogInterface dialog) {
-                    dialog.dismiss();
-                    DBWriter.markAllItemsRead();
-                    ((MainActivity) getActivity()).showSnackbarAbovePlayer(
-                            R.string.mark_all_read_msg, Toast.LENGTH_SHORT);
-                }
-            };
-            markAllReadConfirmationDialog.createNewDialog().show();
-            return true;
-        } else if (itemId == R.id.remove_all_new_flags_item) {
-            ConfirmationDialog removeAllNewFlagsConfirmationDialog = new ConfirmationDialog(getActivity(),
-                    R.string.remove_all_new_flags_label,
-                    R.string.remove_all_new_flags_confirmation_msg) {
-
-                @Override
-                public void onConfirmButtonPressed(DialogInterface dialog) {
-                    dialog.dismiss();
-                    DBWriter.removeAllNewFlags();
-                    ((MainActivity) getActivity()).showSnackbarAbovePlayer(
-                            R.string.removed_all_new_flags_msg, Toast.LENGTH_SHORT);
-                }
-            };
-            removeAllNewFlagsConfirmationDialog.createNewDialog().show();
-            return true;
-        } else if (itemId == R.id.action_search) {
-            ((MainActivity) getActivity()).loadChildFragment(SearchFragment.newInstance());
-            return true;
-        }
-        return false;
     }
 
     @Override
     public boolean onContextItemSelected(@NonNull MenuItem item) {
         Log.d(TAG, "onContextItemSelected() called with: " + "item = [" + item + "]");
-        if (!getUserVisibleHint() || !isVisible() || !isMenuVisible()) {
-            // The method is called on all fragments in a ViewPager, so this needs to be ignored in invisible ones.
-            // Apparently, none of the visibility check method works reliably on its own, so we just use all.
+        if (!getUserVisibleHint()) {
+            return false;
+        }
+        if (!isVisible()) {
             return false;
         }
         if (item.getItemId() == R.id.share_item) {
             return true; // avoids that the position is reset when we need it in the submenu
         }
 
-        if (listAdapter.getLongPressedItem() == null) {
+        if (listAdapter.getSelectedItem() == null) {
             Log.i(TAG, "Selected item or listAdapter was null, ignoring selection");
             return super.onContextItemSelected(item);
         }
-        FeedItem selectedItem = listAdapter.getLongPressedItem();
+        FeedItem selectedItem = listAdapter.getSelectedItem();
 
         return FeedItemMenuHandler.onMenuItemClicked(this, item.getItemId(), selectedItem);
     }
@@ -194,6 +194,7 @@ public abstract class EpisodesListFragment extends Fragment {
         txtvInformation = root.findViewById(R.id.txtvInformation);
 
         recyclerView = root.findViewById(android.R.id.list);
+        recyclerView.setVisibility(View.GONE);
         recyclerView.setRecycledViewPool(((MainActivity) getActivity()).getRecycledViewPool());
         setupLoadMoreScrollListener();
 
@@ -203,7 +204,6 @@ public abstract class EpisodesListFragment extends Fragment {
         }
 
         SwipeRefreshLayout swipeRefreshLayout = root.findViewById(R.id.swipeRefresh);
-        swipeRefreshLayout.setDistanceToTriggerSync(getResources().getInteger(R.integer.swipe_refresh_distance));
         swipeRefreshLayout.setOnRefreshListener(() -> {
             AutoUpdateManager.runImmediate(requireContext());
             new Handler(Looper.getMainLooper()).postDelayed(() -> swipeRefreshLayout.setRefreshing(false),
@@ -216,7 +216,7 @@ public abstract class EpisodesListFragment extends Fragment {
 
         emptyView = new EmptyViewHandler(getContext());
         emptyView.attachToRecyclerView(recyclerView);
-        emptyView.setIcon(R.drawable.ic_feed);
+        emptyView.setIcon(R.attr.feed);
         emptyView.setTitle(R.string.no_all_episodes_head_label);
         emptyView.setMessage(R.string.no_all_episodes_label);
 

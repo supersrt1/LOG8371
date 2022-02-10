@@ -11,9 +11,9 @@ import java.util.Date;
 import java.util.List;
 
 import androidx.test.platform.app.InstrumentationRegistry;
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedItem;
-import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import org.junit.After;
 import org.junit.Before;
@@ -92,7 +92,7 @@ public class DbNullCleanupAlgorithmTest {
         feed.setItems(items);
         List<File> files = new ArrayList<>();
         for (int i = 0; i < numItems; i++) {
-            FeedItem item = new FeedItem(0, "title", "id" + i, "link", new Date(), FeedItem.PLAYED, feed);
+            FeedItem item = new FeedItem(0, "title", "id", "link", new Date(), FeedItem.PLAYED, feed);
 
             File f = new File(destFolder, "file " + i);
             assertTrue(f.createNewFile());

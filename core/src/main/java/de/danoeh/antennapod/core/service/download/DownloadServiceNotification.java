@@ -9,8 +9,8 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import de.danoeh.antennapod.core.ClientConfig;
 import de.danoeh.antennapod.core.R;
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.util.gui.NotificationUtils;
 
 import java.util.List;
@@ -53,7 +53,7 @@ public class DownloadServiceNotification {
         String contentTitle = context.getString(R.string.download_notification_title);
         String downloadsLeft = (numDownloads > 0)
                 ? context.getResources().getQuantityString(R.plurals.downloads_left, numDownloads, numDownloads)
-                : context.getString(R.string.completing);
+                : context.getString(R.string.service_shutting_down);
         String bigText = compileNotificationString(downloads);
 
         notificationCompatBuilder.setContentTitle(contentTitle);
@@ -205,7 +205,7 @@ public class DownloadServiceNotification {
                 .setContentText(context.getText(R.string.authentication_notification_msg))
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(context.getText(R.string.authentication_notification_msg)
                         + ": " + resourceTitle))
-                .setSmallIcon(R.drawable.ic_notification_key)
+                .setSmallIcon(R.drawable.ic_key_white)
                 .setAutoCancel(true)
                 .setContentIntent(ClientConfig.downloadServiceCallbacks.getAuthentificationNotificationContentIntent(context, downloadRequest));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

@@ -99,6 +99,7 @@ public class BugReportActivity extends AppCompatActivity {
     private void exportLog() {
         try {
             File filename = new File(UserPreferences.getDataFolder(null), "full-logs.txt");
+            filename.createNewFile();
             String cmd = "logcat -d -f " + filename.getAbsolutePath();
             Runtime.getRuntime().exec(cmd);
             //share file

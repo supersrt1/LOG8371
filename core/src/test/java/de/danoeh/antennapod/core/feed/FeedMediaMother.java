@@ -1,7 +1,5 @@
 package de.danoeh.antennapod.core.feed;
 
-import de.danoeh.antennapod.model.feed.FeedMedia;
-
 class FeedMediaMother {
 
     private static final String EPISODE_URL = "http://example.com/episode";

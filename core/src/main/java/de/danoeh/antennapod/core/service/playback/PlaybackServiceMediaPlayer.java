@@ -1,7 +1,6 @@
 package de.danoeh.antennapod.core.service.playback;
 
 import android.content.Context;
-import android.media.AudioManager;
 import android.net.wifi.WifiManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
@@ -12,8 +11,8 @@ import android.view.SurfaceHolder;
 import java.util.List;
 import java.util.concurrent.Future;
 
-import de.danoeh.antennapod.model.playback.MediaType;
-import de.danoeh.antennapod.model.playback.Playable;
+import de.danoeh.antennapod.core.feed.MediaType;
+import de.danoeh.antennapod.core.util.playback.Playable;
 
 
 /*
@@ -145,6 +144,11 @@ public abstract class PlaybackServiceMediaPlayer {
     public abstract void setStartWhenPrepared(boolean startWhenPrepared);
 
     /**
+     * Returns true if the playback speed can be adjusted.
+     */
+    public abstract boolean canSetSpeed();
+
+    /**
      * Sets the playback parameters.
      * - Speed
      * - SkipSilence (ExoPlayer only)
@@ -213,7 +217,7 @@ public abstract class PlaybackServiceMediaPlayer {
      * could result in nonsensical results (like a status of PLAYING, but a null playable)
      * @return the current player status
      */
-    public synchronized PlayerStatus getPlayerStatus() {
+    public PlayerStatus getPlayerStatus() {
         return playerStatus;
     }
 
@@ -331,11 +335,6 @@ public abstract class PlaybackServiceMediaPlayer {
         callback.statusChanged(new PSMPInfo(oldPlayerStatus, playerStatus, getPlayable()));
     }
 
-    public boolean isAudioChannelInUse() {
-        AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        return (audioManager.getMode() != AudioManager.MODE_NORMAL || audioManager.isMusicActive());
-    }
-
     /**
      * @see #setPlayerStatus(PlayerStatus, Playable, int)
      */
@@ -349,6 +348,8 @@ public abstract class PlaybackServiceMediaPlayer {
         void shouldStop();
 
         void playbackSpeedChanged(float s);
+
+        void setSpeedAbilityChanged();
 
         void onBufferingUpdate(int percent);
 

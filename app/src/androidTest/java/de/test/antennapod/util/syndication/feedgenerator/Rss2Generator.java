@@ -6,13 +6,10 @@ import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
 
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedFunding;
-import de.danoeh.antennapod.model.feed.FeedItem;
-import de.danoeh.antennapod.parser.feed.namespace.PodcastIndex;
-import de.danoeh.antennapod.core.util.DateFormatter;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.util.DateUtils;
 
 /**
  * Creates RSS 2.0 feeds. See FeedGenerator for more information.
@@ -69,11 +66,8 @@ public class Rss2Generator implements FeedGenerator {
             xml.endTag(null, "image");
         }
 
-        ArrayList<FeedFunding> fundingList = feed.getPaymentLinks();
-        if (fundingList != null) {
-            for (FeedFunding funding: fundingList) {
-                GeneratorUtil.addPaymentLink(xml, funding.url, true);
-            }
+        if (feed.getPaymentLink() != null) {
+            GeneratorUtil.addPaymentLink(xml, feed.getPaymentLink(), true);
         }
 
         // Write FeedItem data
@@ -98,7 +92,7 @@ public class Rss2Generator implements FeedGenerator {
                 }
                 if (item.getPubDate() != null) {
                     xml.startTag(null, "pubDate");
-                    xml.text(DateFormatter.formatRfc822Date(item.getPubDate()));
+                    xml.text(DateUtils.formatRFC822Date(item.getPubDate()));
                     xml.endTag(null, "pubDate");
                 }
                 if ((flags & FEATURE_WRITE_GUID) != 0) {
@@ -113,14 +107,8 @@ public class Rss2Generator implements FeedGenerator {
                     xml.attribute(null, "type", item.getMedia().getMime_type());
                     xml.endTag(null, "enclosure");
                 }
-                if (fundingList != null) {
-                    for (FeedFunding funding: fundingList) {
-                        xml.startTag(PodcastIndex.NSTAG, "funding");
-                        xml.attribute(PodcastIndex.NSTAG, "url", funding.url);
-                        xml.text(funding.content);
-                        GeneratorUtil.addPaymentLink(xml, funding.url, true);
-                        xml.endTag(PodcastIndex.NSTAG, "funding");
-                    }
+                if (item.getPaymentLink() != null) {
+                    GeneratorUtil.addPaymentLink(xml, item.getPaymentLink(), true);
                 }
 
                 xml.endTag(null, "item");

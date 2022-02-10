@@ -4,13 +4,9 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.util.Log;
-
-import java.util.Collections;
-import java.util.List;
-
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
-import de.danoeh.antennapod.model.feed.Feed;
+import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.storage.DBWriter;
 import io.reactivex.Completable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -20,17 +16,10 @@ public class RemoveFeedDialog {
     private static final String TAG = "RemoveFeedDialog";
 
     public static void show(Context context, Feed feed, Runnable onSuccess) {
-        List<Feed> feeds = Collections.singletonList(feed);
-        String message = getMessageId(context, feeds);
-        showDialog(context, feeds, message, onSuccess);
-    }
+        int messageId = feed.isLocalFeed() ? R.string.feed_delete_confirmation_local_msg
+                : R.string.feed_delete_confirmation_msg;
+        String message = context.getString(messageId, feed.getTitle());
 
-    public static void show(Context context, List<Feed> feeds, Runnable onSuccess) {
-        String message = getMessageId(context, feeds);
-        showDialog(context, feeds, message, onSuccess);
-    }
-
-    private static void showDialog(Context context, List<Feed> feeds, String message, Runnable onSuccess) {
         ConfirmationDialog dialog = new ConfirmationDialog(context, R.string.remove_feed_label, message) {
             @Override
             public void onConfirmButtonPressed(DialogInterface clickedDialog) {
@@ -42,17 +31,12 @@ public class RemoveFeedDialog {
                 progressDialog.setCancelable(false);
                 progressDialog.show();
 
-                Completable.fromCallable(() -> {
-                    for (Feed feed : feeds) {
-                        DBWriter.deleteFeed(context, feed.getId()).get();
-                    }
-                    return null;
-                })
+                Completable.fromCallable(() -> DBWriter.deleteFeed(context, feed.getId()).get())
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
                         .subscribe(
                             () -> {
-                                Log.d(TAG, "Feed(s) deleted");
+                                Log.d(TAG, "Feed was deleted");
                                 if (onSuccess != null) {
                                     onSuccess.run();
                                 }
@@ -64,18 +48,5 @@ public class RemoveFeedDialog {
             }
         };
         dialog.createNewDialog().show();
-    }
-
-    private static String getMessageId(Context context, List<Feed> feeds) {
-        if (feeds.size() == 1) {
-            if (feeds.get(0).isLocalFeed()) {
-                return context.getString(R.string.feed_delete_confirmation_local_msg, feeds.get(0).getTitle());
-            } else {
-                return context.getString(R.string.feed_delete_confirmation_msg, feeds.get(0).getTitle());
-            }
-        } else {
-            return context.getString(R.string.feed_delete_confirmation_msg_batch);
-        }
-
     }
 }

@@ -153,13 +153,10 @@ public class SleepTimerDialog extends DialogFragment {
                 return;
             }
             try {
-                long time = Long.parseLong(etxtTime.getText().toString());
-                if (time == 0) {
-                    throw new NumberFormatException("Timer must not be zero");
-                }
                 SleepTimerPreferences.setLastTimer(etxtTime.getText().toString(), spTimeUnit.getSelectedItemPosition());
+                long time = SleepTimerPreferences.timerMillis();
                 if (controller != null) {
-                    controller.setSleepTimer(SleepTimerPreferences.timerMillis());
+                    controller.setSleepTimer(time);
                 }
                 closeKeyboard(content);
             } catch (NumberFormatException e) {

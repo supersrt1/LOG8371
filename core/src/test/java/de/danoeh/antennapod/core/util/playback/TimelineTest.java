@@ -7,6 +7,13 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+
+import java.util.Date;
+import java.util.List;
+
+import de.danoeh.antennapod.core.feed.Chapter;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.storage.DBReader;
 
 import org.junit.After;
@@ -44,13 +51,25 @@ public class TimelineTest {
         dbReaderMock.close();
     }
 
+    @SuppressWarnings("SameParameterValue")
+    private Playable newTestPlayable(List<Chapter> chapters, String shownotes, int duration) {
+        FeedItem item = new FeedItem(0, "Item", "item-id", "http://example.com/item", new Date(), FeedItem.PLAYED, null);
+        item.setChapters(chapters);
+        item.setContentEncoded(shownotes);
+        FeedMedia media = new FeedMedia(item, "http://example.com/episode", 100, "audio/mp3");
+        media.setDuration(duration);
+        item.setMedia(media);
+        return media;
+    }
+
     @Test
     public void testProcessShownotesAddTimecodeHhmmssNoChapters() {
         final String timeStr = "10:11:12";
         final long time = 3600 * 1000 * 10 + 60 * 1000 * 11 + 12 * 1000;
 
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStr + " here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -60,8 +79,9 @@ public class TimelineTest {
         final String timeStr = "25:00:00";
         final long time = 25 * 60 * 60 * 1000;
 
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStr + " here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -71,8 +91,9 @@ public class TimelineTest {
         final String timeStr = "10:11";
         final long time = 3600 * 1000 * 10 + 60 * 1000 * 11;
 
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStr + " here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -82,8 +103,9 @@ public class TimelineTest {
         final String timeStr = "10:11";
         final long time = 10 * 60 * 1000 + 11 * 1000;
 
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, 11 * 60 * 1000);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStr + " here.</p>", 11 * 60 * 1000);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -92,9 +114,9 @@ public class TimelineTest {
     public void testProcessShownotesAddTimecodeHmmssNoChapters() {
         final String timeStr = "2:11:12";
         final long time = 2 * 60 * 60 * 1000 + 11 * 60 * 1000 + 12 * 1000;
-
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStr + " here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -104,8 +126,9 @@ public class TimelineTest {
         final String timeStr = "1:12";
         final long time = 60 * 1000 + 12 * 1000;
 
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, 2 * 60 * 1000);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStr + " here.</p>", 2 * 60 * 1000);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -114,9 +137,9 @@ public class TimelineTest {
     public void testProcessShownotesAddNoTimecodeDuration() {
         final String timeStr = "2:11:12";
         final int time = 2 * 60 * 60 * 1000 + 11 * 60 * 1000 + 12 * 1000;
-
-        String shownotes = "<p> Some test text with a timecode " + timeStr + " here.</p>";
-        Timeline t = new Timeline(context, shownotes, time);
+        String originalText = "<p> Some test text with a timecode " + timeStr + " here.</p>";
+        Playable p = newTestPlayable(null, originalText, time);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         Document d = Jsoup.parse(res);
         assertEquals("Should not parse time codes that equal duration", 0, d.body().getElementsByTag("a").size());
@@ -126,9 +149,9 @@ public class TimelineTest {
     public void testProcessShownotesAddTimecodeMultipleFormatsNoChapters() {
         final String[] timeStrings = new String[]{ "10:12", "1:10:12" };
 
-        String shownotes = "<p> Some test text with a timecode " + timeStrings[0]
-                + " here. Hey look another one " + timeStrings[1] + " here!</p>";
-        Timeline t = new Timeline(context, shownotes, 2 * 60 * 60 * 1000);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStrings[0] + " here. Hey look another one " + timeStrings[1] + " here!</p>", 2 * 60 * 60 * 1000);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{10 * 60 * 1000 + 12 * 1000,
                 60 * 60 * 1000 + 10 * 60 * 1000 + 12 * 1000}, timeStrings);
@@ -140,9 +163,9 @@ public class TimelineTest {
         // One of these timecodes fits as HH:MM and one does not so both should be parsed as MM:SS.
         final String[] timeStrings = new String[]{ "10:12", "2:12" };
 
-        String shownotes = "<p> Some test text with a timecode " + timeStrings[0]
-                + " here. Hey look another one " + timeStrings[1] + " here!</p>";
-        Timeline t = new Timeline(context, shownotes, 3 * 60 * 60 * 1000);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode "
+                + timeStrings[0] + " here. Hey look another one " + timeStrings[1] + " here!</p>", 3 * 60 * 60 * 1000);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{10 * 60 * 1000 + 12 * 1000, 2 * 60 * 1000 + 12 * 1000}, timeStrings);
     }
@@ -152,8 +175,9 @@ public class TimelineTest {
         final String timeStr = "10:11";
         final long time = 3600 * 1000 * 10 + 60 * 1000 * 11;
 
-        String shownotes = "<p> Some test text with a timecode (" + timeStr + ") here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode ("
+                + timeStr + ") here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -163,8 +187,9 @@ public class TimelineTest {
         final String timeStr = "10:11";
         final long time = 3600 * 1000 * 10 + 60 * 1000 * 11;
 
-        String shownotes = "<p> Some test text with a timecode [" + timeStr + "] here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode ["
+                + timeStr + "] here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -174,8 +199,9 @@ public class TimelineTest {
         final String timeStr = "10:11";
         final long time = 3600 * 1000 * 10 + 60 * 1000 * 11;
 
-        String shownotes = "<p> Some test text with a timecode <" + timeStr + "> here.</p>";
-        Timeline t = new Timeline(context, shownotes, Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, "<p> Some test text with a timecode <"
+                + timeStr + "> here.</p>", Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[]{time}, new String[]{timeStr});
     }
@@ -190,7 +216,8 @@ public class TimelineTest {
         }
         shownotes.append("here.</p>");
 
-        Timeline t = new Timeline(context, shownotes.toString(), Integer.MAX_VALUE);
+        Playable p = newTestPlayable(null, shownotes.toString(), Integer.MAX_VALUE);
+        Timeline t = new Timeline(context, p);
         String res = t.processShownotes();
         checkLinkCorrect(res, new long[0], new String[0]);
     }

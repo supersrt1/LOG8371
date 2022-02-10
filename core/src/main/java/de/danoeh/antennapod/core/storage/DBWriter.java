@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import de.danoeh.antennapod.core.sync.SyncService;
-import de.danoeh.antennapod.net.sync.model.EpisodeAction;
+import de.danoeh.antennapod.core.sync.model.EpisodeAction;
 import org.greenrobot.eventbus.EventBus;
 
 import java.io.File;
@@ -32,11 +32,11 @@ import de.danoeh.antennapod.core.event.MessageEvent;
 import de.danoeh.antennapod.core.event.PlaybackHistoryEvent;
 import de.danoeh.antennapod.core.event.QueueEvent;
 import de.danoeh.antennapod.core.event.UnreadItemsUpdateEvent;
-import de.danoeh.antennapod.model.feed.Feed;
+import de.danoeh.antennapod.core.feed.Feed;
 import de.danoeh.antennapod.core.feed.FeedEvent;
-import de.danoeh.antennapod.model.feed.FeedItem;
-import de.danoeh.antennapod.model.feed.FeedMedia;
-import de.danoeh.antennapod.model.feed.FeedPreferences;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.FeedPreferences;
 import de.danoeh.antennapod.core.preferences.GpodnetPreferences;
 import de.danoeh.antennapod.core.preferences.PlaybackPreferences;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
@@ -46,8 +46,8 @@ import de.danoeh.antennapod.core.util.FeedItemPermutors;
 import de.danoeh.antennapod.core.util.IntentUtils;
 import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.Permutor;
-import de.danoeh.antennapod.model.feed.SortOrder;
-import de.danoeh.antennapod.model.playback.Playable;
+import de.danoeh.antennapod.core.util.SortOrder;
+import de.danoeh.antennapod.core.util.playback.Playable;
 import de.danoeh.antennapod.core.util.playback.PlayableUtils;
 
 /**
@@ -535,14 +535,6 @@ public class DBWriter {
         }
     }
 
-    public static Future<?> toggleFavoriteItem(final FeedItem item) {
-        if (item.isTagged(FeedItem.TAG_FAVORITE)) {
-            return removeFavoriteItem(item);
-        } else {
-            return addFavoriteItem(item);
-        }
-    }
-
     public static Future<?> addFavoriteItem(final FeedItem item) {
         return dbExec.submit(() -> {
             final PodDBAdapter adapter = PodDBAdapter.getInstance().open();
@@ -803,7 +795,7 @@ public class DBWriter {
         return dbExec.submit(() -> {
             PodDBAdapter adapter = PodDBAdapter.getInstance();
             adapter.open();
-            adapter.storeFeedItemlist(items);
+            adapter.setFeedItemlist(items);
             adapter.close();
             EventBus.getDefault().post(FeedItemEvent.updated(items));
         });
@@ -953,6 +945,23 @@ public class DBWriter {
         });
     }
 
+    /**
+     * Sets the 'auto_download'-attribute of specific FeedItem.
+     *
+     * @param feedItem     FeedItem.
+     * @param autoDownload true enables auto download, false disables it
+     */
+    public static Future<?> setFeedItemAutoDownload(final FeedItem feedItem,
+                                                    final boolean autoDownload) {
+        return dbExec.submit(() -> {
+            final PodDBAdapter adapter = PodDBAdapter.getInstance();
+            adapter.open();
+            adapter.setFeedItemAutoDownload(feedItem, autoDownload ? 1 : 0);
+            adapter.close();
+            EventBus.getDefault().post(new UnreadItemsUpdateEvent());
+        });
+    }
+
     public static Future<?> saveFeedItemAutoDownloadFailed(final FeedItem feedItem) {
         return dbExec.submit(() -> {
             int failedAttempts = feedItem.getFailedAutoDownloadAttempts() + 1;
@@ -971,6 +980,25 @@ public class DBWriter {
             EventBus.getDefault().post(new UnreadItemsUpdateEvent());
         });
     }
+
+    /**
+     * Sets the 'auto_download'-attribute of specific FeedItem.
+     *
+     * @param feed         This feed's episodes will be processed.
+     * @param autoDownload If true, auto download will be enabled for the feed's episodes. Else,
+     */
+    public static Future<?> setFeedsItemsAutoDownload(final Feed feed,
+                                                      final boolean autoDownload) {
+        Log.d(TAG, (autoDownload ? "Enabling" : "Disabling") + " auto download for items of feed " + feed.getId());
+        return dbExec.submit(() -> {
+            final PodDBAdapter adapter = PodDBAdapter.getInstance();
+            adapter.open();
+            adapter.setFeedsItemsAutoDownload(feed, autoDownload);
+            adapter.close();
+            EventBus.getDefault().post(new UnreadItemsUpdateEvent());
+        });
+    }
+
 
     /**
      * Set filter of the feed

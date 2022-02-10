@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.FeedUpdateWorker;
 import de.danoeh.antennapod.core.storage.DBTasks;
-import de.danoeh.antennapod.core.util.NetworkUtils;
 
 public class AutoUpdateManager {
     private static final String WORK_ID_FEED_UPDATE = "de.danoeh.antennapod.core.service.FeedUpdateWorker";
@@ -119,10 +118,6 @@ public class AutoUpdateManager {
      */
     public static void runImmediate(@NonNull Context context) {
         Log.d(TAG, "Run auto update immediately in background.");
-        if (!NetworkUtils.networkAvailable()) {
-            Log.d(TAG, "Ignoring: No network connection.");
-            return;
-        }
         new Thread(() -> DBTasks.refreshAllFeeds(
                 context.getApplicationContext(), true), "ManualRefreshAllFeeds").start();
     }

@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.Random;
 
 import androidx.test.platform.app.InstrumentationRegistry;
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedItem;
-import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.util.LongList;
 import org.junit.After;
@@ -218,7 +218,7 @@ public class DbReaderTest {
         }
         PodDBAdapter adapter = PodDBAdapter.getInstance();
         adapter.open();
-        adapter.storeFeedItemlist(downloaded);
+        adapter.setFeedItemlist(downloaded);
         adapter.close();
         return downloaded;
     }
@@ -257,7 +257,7 @@ public class DbReaderTest {
         }
         PodDBAdapter adapter = PodDBAdapter.getInstance();
         adapter.open();
-        adapter.storeFeedItemlist(newItems);
+        adapter.setFeedItemlist(newItems);
         adapter.close();
         return newItems;
     }
@@ -322,8 +322,8 @@ public class DbReaderTest {
         final int numFeeds = 10;
         final int numItems = 10;
         DbTestUtils.saveFeedlist(numFeeds, numItems, true);
-        NavDrawerData navDrawerData = DBReader.getNavDrawerData();
-        assertEquals(numFeeds, navDrawerData.items.size());
+        DBReader.NavDrawerData navDrawerData = DBReader.getNavDrawerData();
+        assertEquals(numFeeds, navDrawerData.feeds.size());
         assertEquals(0, navDrawerData.numNewItems);
         assertEquals(0, navDrawerData.queueSize);
     }
@@ -351,8 +351,8 @@ public class DbReaderTest {
 
         adapter.close();
 
-        NavDrawerData navDrawerData = DBReader.getNavDrawerData();
-        assertEquals(numFeeds, navDrawerData.items.size());
+        DBReader.NavDrawerData navDrawerData = DBReader.getNavDrawerData();
+        assertEquals(numFeeds, navDrawerData.feeds.size());
         assertEquals(numNew, navDrawerData.numNewItems);
         assertEquals(numQueue, navDrawerData.queueSize);
     }
@@ -416,24 +416,5 @@ public class DbReaderTest {
         item2.setChapters(DBReader.loadChaptersOfFeedItem(item2));
         assertTrue(item2.hasChapters());
         assertEquals(item1.getChapters(), item2.getChapters());
-    }
-
-    @Test
-    public void testGetItemByEpisodeUrl() {
-        List<Feed> feeds = saveFeedlist(1, 1, true);
-        FeedItem item1 = feeds.get(0).getItems().get(0);
-        FeedItem feedItemByEpisodeUrl = DBReader.getFeedItemByGuidOrEpisodeUrl(null,
-                item1.getMedia().getDownload_url());
-        assertEquals(item1.getItemIdentifier(), feedItemByEpisodeUrl.getItemIdentifier());
-    }
-
-    @Test
-    public void testGetItemByGuid() {
-        List<Feed> feeds = saveFeedlist(1, 1, true);
-        FeedItem item1 = feeds.get(0).getItems().get(0);
-
-        FeedItem feedItemByGuid = DBReader.getFeedItemByGuidOrEpisodeUrl(item1.getItemIdentifier(),
-                item1.getMedia().getDownload_url());
-        assertEquals(item1.getItemIdentifier(), feedItemByGuid.getItemIdentifier());
     }
 }

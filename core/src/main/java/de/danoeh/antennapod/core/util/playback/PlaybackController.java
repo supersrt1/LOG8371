@@ -7,23 +7,33 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.res.TypedArray;
 import android.media.MediaPlayer;
+import android.os.Build;
 import android.os.IBinder;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.view.SurfaceHolder;
+import android.widget.ImageButton;
 import androidx.annotation.NonNull;
 import de.danoeh.antennapod.core.R;
 import de.danoeh.antennapod.core.event.MessageEvent;
 import de.danoeh.antennapod.core.event.ServiceEvent;
-import de.danoeh.antennapod.model.playback.MediaType;
+import de.danoeh.antennapod.core.feed.Chapter;
+import de.danoeh.antennapod.core.feed.MediaType;
 import de.danoeh.antennapod.core.feed.util.PlaybackSpeedUtils;
 import de.danoeh.antennapod.core.preferences.PlaybackPreferences;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.playback.PlaybackService;
 import de.danoeh.antennapod.core.service.playback.PlaybackServiceMediaPlayer;
 import de.danoeh.antennapod.core.service.playback.PlayerStatus;
-import de.danoeh.antennapod.model.playback.Playable;
+import de.danoeh.antennapod.ui.common.ThemeUtils;
+import io.reactivex.Maybe;
+import io.reactivex.MaybeOnSubscribe;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.schedulers.Schedulers;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -49,7 +59,8 @@ public abstract class PlaybackController {
     private boolean released = false;
     private boolean initialized = false;
     private boolean eventsRegistered = false;
-    private long loadedFeedMedia = -1;
+
+    private Disposable mediaLoader;
 
     public PlaybackController(@NonNull Activity activity) {
         this.activity = activity;
@@ -66,7 +77,7 @@ public abstract class PlaybackController {
         if (PlaybackService.isRunning) {
             initServiceRunning();
         } else {
-            updatePlayButtonShowsPlay(true);
+            initServiceNotRunning();
         }
     }
 
@@ -88,6 +99,9 @@ public abstract class PlaybackController {
 
         activity.registerReceiver(notificationReceiver, new IntentFilter(
             PlaybackService.ACTION_PLAYER_NOTIFICATION));
+
+        activity.registerReceiver(shutdownReceiver, new IntentFilter(
+                PlaybackService.ACTION_SHUTDOWN_PLAYBACK_SERVICE));
 
         if (!released) {
             bindToService();
@@ -116,6 +130,12 @@ public abstract class PlaybackController {
             // ignore
         }
         unbind();
+
+        try {
+            activity.unregisterReceiver(shutdownReceiver);
+        } catch (IllegalArgumentException e) {
+            // ignore
+        }
         media = null;
         released = true;
 
@@ -241,15 +261,34 @@ public abstract class PlaybackController {
                 case PlaybackService.NOTIFICATION_TYPE_PLAYBACK_SPEED_CHANGE:
                     onPlaybackSpeedChange();
                     break;
+                case PlaybackService.NOTIFICATION_TYPE_SET_SPEED_ABILITY_CHANGED:
+                    onSetSpeedAbilityChanged();
+                    break;
             }
         }
 
+    };
+
+    private final BroadcastReceiver shutdownReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (playbackService != null) {
+                if (TextUtils.equals(intent.getAction(), PlaybackService.ACTION_SHUTDOWN_PLAYBACK_SERVICE)) {
+                    unbind();
+                    onShutdownNotification();
+                }
+            }
+        }
     };
 
     public void onPositionObserverUpdate() {}
 
 
     public void onPlaybackSpeedChange() {}
+
+    public void onSetSpeedAbilityChanged() {}
+
+    public void onShutdownNotification() {}
 
     /**
      * Called when the currently displayed information should be refreshed.
@@ -273,58 +312,90 @@ public abstract class PlaybackController {
      * should be used to update the GUI or start/cancel background threads.
      */
     private void handleStatus() {
+        final int playResource;
+        final int pauseResource;
+        final CharSequence playText = activity.getString(R.string.play_label);
+        final CharSequence pauseText = activity.getString(R.string.pause_label);
+
+        if (PlaybackService.getCurrentMediaType() == MediaType.AUDIO  ||  PlaybackService.isCasting()) {
+            TypedArray res = activity.obtainStyledAttributes(new int[]{ R.attr.av_play, R.attr.av_pause});
+            playResource = res.getResourceId(0, R.drawable.ic_av_play_black_48dp);
+            pauseResource = res.getResourceId(1, R.drawable.ic_av_pause_black_48dp);
+            res.recycle();
+        } else {
+            playResource = R.drawable.ic_av_play_white_80dp;
+            pauseResource = R.drawable.ic_av_pause_white_80dp;
+        }
+
         Log.d(TAG, "status: " + status.toString());
-        checkMediaInfoLoaded();
         switch (status) {
             case ERROR:
                 EventBus.getDefault().post(new MessageEvent(activity.getString(R.string.player_error_msg)));
                 handleError(MediaPlayer.MEDIA_ERROR_UNKNOWN);
                 break;
             case PAUSED:
+                checkMediaInfoLoaded();
                 onPositionObserverUpdate();
-                updatePlayButtonShowsPlay(true);
-                if (!PlaybackService.isCasting() && PlaybackService.getCurrentMediaType() == MediaType.VIDEO) {
+                updatePlayButtonAppearance(playResource, playText);
+                if (!PlaybackService.isCasting() &&
+                        PlaybackService.getCurrentMediaType() == MediaType.VIDEO) {
                     setScreenOn(false);
                 }
                 break;
             case PLAYING:
-                if (!PlaybackService.isCasting() && PlaybackService.getCurrentMediaType() == MediaType.VIDEO) {
+                checkMediaInfoLoaded();
+                if (!PlaybackService.isCasting() &&
+                        PlaybackService.getCurrentMediaType() == MediaType.VIDEO) {
                     onAwaitingVideoSurface();
                     setScreenOn(true);
                 }
-                updatePlayButtonShowsPlay(false);
+                updatePlayButtonAppearance(pauseResource, pauseText);
                 break;
             case PREPARING:
+                checkMediaInfoLoaded();
                 if (playbackService != null) {
-                    updatePlayButtonShowsPlay(!playbackService.isStartWhenPrepared());
+                    if (playbackService.isStartWhenPrepared()) {
+                        updatePlayButtonAppearance(pauseResource, pauseText);
+                    } else {
+                        updatePlayButtonAppearance(playResource, playText);
+                    }
                 }
                 break;
+            case STOPPED:
+                updatePlayButtonAppearance(playResource, playText);
+                break;
             case PREPARED:
-                updatePlayButtonShowsPlay(true);
+                checkMediaInfoLoaded();
+                updatePlayButtonAppearance(playResource, playText);
                 onPositionObserverUpdate();
                 break;
             case SEEKING:
                 onPositionObserverUpdate();
                 break;
-            case STOPPED: // Fall-through
             case INITIALIZED:
-                updatePlayButtonShowsPlay(true);
-                break;
-            default:
+                checkMediaInfoLoaded();
+                updatePlayButtonAppearance(playResource, playText);
                 break;
         }
     }
 
     private void checkMediaInfoLoaded() {
-        if (!mediaInfoLoaded || loadedFeedMedia != PlaybackPreferences.getCurrentlyPlayingFeedMediaId()) {
-            loadedFeedMedia = PlaybackPreferences.getCurrentlyPlayingFeedMediaId();
+        if (!mediaInfoLoaded) {
             loadMediaInfo();
         }
         mediaInfoLoaded = true;
     }
 
-    protected void updatePlayButtonShowsPlay(boolean showPlay) {
+    private void updatePlayButtonAppearance(int resource, CharSequence contentDescription) {
+        ImageButton butPlay = getPlayButton();
+        if(butPlay != null) {
+            butPlay.setImageResource(resource);
+            butPlay.setContentDescription(contentDescription);
+        }
+    }
 
+    public ImageButton getPlayButton() {
+        return null;
     }
 
     public abstract void loadMediaInfo();
@@ -455,6 +526,12 @@ public abstract class PlaybackController {
         }
     }
 
+    public void seekToChapter(Chapter chapter) {
+        if (playbackService != null) {
+            playbackService.seekToChapter(chapter);
+        }
+    }
+
     public void seekTo(int time) {
         if (playbackService != null) {
             playbackService.seekTo(time);
@@ -469,6 +546,13 @@ public abstract class PlaybackController {
 
     public PlayerStatus getStatus() {
         return status;
+    }
+
+    public boolean canSetPlaybackSpeed() {
+        return UserPreferences.useSonic()
+                || UserPreferences.useExoplayer()
+                || Build.VERSION.SDK_INT >= 23
+                || (playbackService != null && playbackService.canSetSpeed());
     }
 
     public void setPlaybackSpeed(float speed) {
@@ -492,8 +576,14 @@ public abstract class PlaybackController {
         }
     }
 
-    public float getCurrentPlaybackSpeedMultiplier() {
+    public void setVolume(float leftVolume, float rightVolume) {
         if (playbackService != null) {
+            playbackService.setVolume(leftVolume, rightVolume);
+        }
+    }
+
+    public float getCurrentPlaybackSpeedMultiplier() {
+        if (playbackService != null && canSetPlaybackSpeed()) {
             return playbackService.getCurrentPlaybackSpeed();
         } else {
             return PlaybackSpeedUtils.getCurrentPlaybackSpeed(getMedia());
@@ -571,5 +661,30 @@ public abstract class PlaybackController {
 
     public boolean isStreaming() {
         return playbackService != null && playbackService.isStreaming();
+    }
+
+    private void initServiceNotRunning() {
+        if (getPlayButton() == null) {
+            return;
+        }
+        Log.v(TAG, "initServiceNotRunning()");
+        mediaLoader = Maybe.create((MaybeOnSubscribe<Playable>) emitter -> {
+            Playable media = getMedia();
+            if (media != null) {
+                emitter.onSuccess(media);
+            } else {
+                emitter.onComplete();
+            }
+        })
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(media -> {
+                if (media.getMediaType() == MediaType.AUDIO) {
+                    getPlayButton().setImageResource(
+                            ThemeUtils.getDrawableFromAttr(activity, de.danoeh.antennapod.core.R.attr.av_play));
+                } else {
+                    getPlayButton().setImageResource(R.drawable.ic_av_play_white_80dp);
+                }
+            }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 }

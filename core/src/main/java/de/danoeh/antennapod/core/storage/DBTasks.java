@@ -13,9 +13,9 @@ import de.danoeh.antennapod.core.R;
 import de.danoeh.antennapod.core.event.FeedItemEvent;
 import de.danoeh.antennapod.core.event.FeedListUpdateEvent;
 import de.danoeh.antennapod.core.event.MessageEvent;
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedItem;
-import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.feed.LocalFeedUpdater;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.download.DownloadStatus;
@@ -24,7 +24,6 @@ import de.danoeh.antennapod.core.sync.SyncService;
 import de.danoeh.antennapod.core.util.DownloadError;
 import de.danoeh.antennapod.core.util.LongList;
 import de.danoeh.antennapod.core.util.comparator.FeedItemPubdateComparator;
-import de.danoeh.antennapod.net.sync.model.EpisodeAction;
 import org.greenrobot.eventbus.EventBus;
 
 import java.util.ArrayList;
@@ -321,7 +320,7 @@ public final class DBTasks {
     private static Feed searchFeedByIdentifyingValueOrID(PodDBAdapter adapter,
                                                          Feed feed) {
         if (feed.getId() != 0) {
-            return DBReader.getFeed(feed.getId());
+            return DBReader.getFeed(feed.getId(), adapter);
         } else {
             List<Feed> feeds = DBReader.getFeedList();
             for (Feed f : feeds) {
@@ -337,55 +336,13 @@ public final class DBTasks {
     /**
      * Get a FeedItem by its identifying value.
      */
-    private static FeedItem searchFeedItemByIdentifyingValue(List<FeedItem> items, FeedItem searchItem) {
-        for (FeedItem item : items) {
-            if (TextUtils.equals(item.getIdentifyingValue(), searchItem.getIdentifyingValue())) {
+    private static FeedItem searchFeedItemByIdentifyingValue(Feed feed, String identifier) {
+        for (FeedItem item : feed.getItems()) {
+            if (TextUtils.equals(item.getIdentifyingValue(), identifier)) {
                 return item;
             }
         }
         return null;
-    }
-
-    /**
-     * Guess if one of the items could actually mean the searched item, even if it uses another identifying value.
-     * This is to work around podcasters breaking their GUIDs.
-     */
-    private static FeedItem searchFeedItemGuessDuplicate(List<FeedItem> items, FeedItem searchItem) {
-        for (FeedItem item : items) {
-            if ((item.getMedia() != null)
-                    && (searchItem.getMedia() != null)
-                    && !TextUtils.isEmpty(item.getMedia().getStreamUrl())
-                    && !TextUtils.isEmpty(searchItem.getMedia().getStreamUrl())
-                    && TextUtils.equals(item.getMedia().getStreamUrl(), searchItem.getMedia().getStreamUrl())) {
-                return item;
-            } else if (titlesLookSimilar(item.getTitle(), searchItem.getTitle())) {
-                if (searchItem.getPubDate() == null || item.getPubDate() == null) {
-                    continue;
-                }
-                long dateOriginal = item.getPubDate().getTime();
-                long dateNew = searchItem.getPubDate().getTime();
-                if (Math.abs(dateOriginal - dateNew) < 7L * 24L * 3600L * 1000L) { // Same week
-                    return item;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static boolean titlesLookSimilar(String title1, String title2) {
-        if (TextUtils.isEmpty(title1) || TextUtils.isEmpty(title2)) {
-            return false;
-        }
-        return canonicalizeTitle(title1).equals(canonicalizeTitle(title2));
-    }
-
-    private static String canonicalizeTitle(String title) {
-        return title
-                .trim()
-                .replace('“', '"')
-                .replace('”', '"')
-                .replace('„', '"')
-                .replace('—', '-');
     }
 
     /**
@@ -454,47 +411,11 @@ public final class DBTasks {
             // Look for new or updated Items
             for (int idx = 0; idx < newFeed.getItems().size(); idx++) {
                 final FeedItem item = newFeed.getItems().get(idx);
-
-                if (item != searchFeedItemGuessDuplicate(newFeed.getItems(), item)) {
-                    // Canonical episode is the first one returned (usually oldest)
-                    DBWriter.addDownloadStatus(new DownloadStatus(savedFeed,
-                            item.getTitle(), DownloadError.ERROR_PARSER_EXCEPTION_DUPLICATE, false,
-                            "The podcast host appears to have added the same episode twice. "
-                                    + "AntennaPod attempted to repair it.", false));
-                    continue;
-                }
-
-                FeedItem oldItem = searchFeedItemByIdentifyingValue(savedFeed.getItems(), item);
+                FeedItem oldItem = searchFeedItemByIdentifyingValue(savedFeed, item.getIdentifyingValue());
                 if (oldItem == null) {
-                    oldItem = searchFeedItemGuessDuplicate(savedFeed.getItems(), item);
-                    if (oldItem != null) {
-                        Log.d(TAG, "Repaired duplicate: " + oldItem + ", " + item);
-                        DBWriter.addDownloadStatus(new DownloadStatus(savedFeed,
-                                item.getTitle(), DownloadError.ERROR_PARSER_EXCEPTION_DUPLICATE, false,
-                                "The podcast host changed the ID of an existing episode instead of just "
-                                        + "updating the episode itself. AntennaPod attempted to repair it.\n\n"
-                                        + "{" + oldItem.getTitle() + "} with ID " + oldItem.getItemIdentifier()
-                                        + " seems to be the same as {" + item.getTitle() + "} with ID "
-                                        + item.getItemIdentifier(), false));
-                        oldItem.setItemIdentifier(item.getItemIdentifier());
-
-                        if (oldItem.isPlayed() && oldItem.getMedia() != null) {
-                            EpisodeAction action = new EpisodeAction.Builder(oldItem, EpisodeAction.PLAY)
-                                    .currentTimestamp()
-                                    .started(oldItem.getMedia().getDuration() / 1000)
-                                    .position(oldItem.getMedia().getDuration() / 1000)
-                                    .total(oldItem.getMedia().getDuration() / 1000)
-                                    .build();
-                            SyncService.enqueueEpisodeAction(context, action);
-                        }
-                    }
-                }
-
-                if (oldItem != null) {
-                    oldItem.updateFromOther(item);
-                } else {
                     // item is new
                     item.setFeed(savedFeed);
+                    item.setAutoDownload(savedFeed.getPreferences().getAutoDownload());
 
                     if (idx >= savedFeed.getItems().size()) {
                         savedFeed.getItems().add(item);
@@ -514,6 +435,8 @@ public final class DBTasks {
                                 + " new, prior most recent date = " + priorMostRecentDate);
                         item.setNew();
                     }
+                } else {
+                    oldItem.updateFromOther(item);
                 }
             }
 
@@ -522,7 +445,7 @@ public final class DBTasks {
                 Iterator<FeedItem> it = savedFeed.getItems().iterator();
                 while (it.hasNext()) {
                     FeedItem feedItem = it.next();
-                    if (searchFeedItemByIdentifyingValue(newFeed.getItems(), feedItem) == null) {
+                    if (searchFeedItemByIdentifyingValue(newFeed, feedItem.getIdentifyingValue()) == null) {
                         unlistedItems.add(feedItem);
                         it.remove();
                     }

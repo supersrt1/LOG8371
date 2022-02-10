@@ -4,8 +4,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -21,14 +19,9 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-
 import com.google.android.material.snackbar.Snackbar;
-import com.leinardi.android.speeddial.SpeedDialView;
-
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
-import de.danoeh.antennapod.adapter.EpisodeItemListAdapter;
 import de.danoeh.antennapod.adapter.QueueRecyclerAdapter;
 import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
 import de.danoeh.antennapod.core.event.DownloadEvent;
@@ -38,10 +31,7 @@ import de.danoeh.antennapod.core.event.PlaybackPositionEvent;
 import de.danoeh.antennapod.core.event.PlayerStatusEvent;
 import de.danoeh.antennapod.core.event.QueueEvent;
 import de.danoeh.antennapod.core.event.UnreadItemsUpdateEvent;
-import de.danoeh.antennapod.core.menuhandler.MenuItemUtils;
-import de.danoeh.antennapod.fragment.actions.EpisodeMultiSelectActionHandler;
-import de.danoeh.antennapod.fragment.swipeactions.SwipeActions;
-import de.danoeh.antennapod.model.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.feed.util.PlaybackSpeedUtils;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.download.DownloadService;
@@ -50,10 +40,11 @@ import de.danoeh.antennapod.core.storage.DBWriter;
 import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.Converter;
 import de.danoeh.antennapod.core.util.FeedItemUtil;
-import de.danoeh.antennapod.model.feed.FeedItemFilter;
-import de.danoeh.antennapod.model.feed.SortOrder;
+import de.danoeh.antennapod.core.util.SortOrder;
 import de.danoeh.antennapod.core.util.download.AutoUpdateManager;
+import de.danoeh.antennapod.dialog.EpisodesApplyActionFragment;
 import de.danoeh.antennapod.menuhandler.FeedItemMenuHandler;
+import de.danoeh.antennapod.menuhandler.MenuItemUtils;
 import de.danoeh.antennapod.view.EmptyViewHandler;
 import de.danoeh.antennapod.view.EpisodeItemListRecyclerView;
 import de.danoeh.antennapod.view.viewholder.EpisodeItemViewHolder;
@@ -68,11 +59,14 @@ import org.greenrobot.eventbus.ThreadMode;
 import java.util.List;
 import java.util.Locale;
 
+import static de.danoeh.antennapod.dialog.EpisodesApplyActionFragment.ACTION_DELETE;
+import static de.danoeh.antennapod.dialog.EpisodesApplyActionFragment.ACTION_DOWNLOAD;
+import static de.danoeh.antennapod.dialog.EpisodesApplyActionFragment.ACTION_REMOVE_FROM_QUEUE;
+
 /**
  * Shows all items in the queue.
  */
-public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickListener,
-        EpisodeItemListAdapter.OnSelectModeListener {
+public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickListener {
     public static final String TAG = "QueueFragment";
     private static final String KEY_UP_ARROW = "up_arrow";
 
@@ -92,10 +86,8 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
     private static final String PREF_SHOW_LOCK_WARNING = "show_lock_warning";
 
     private Disposable disposable;
-    private SwipeActions swipeActions;
+    private ItemTouchHelper itemTouchHelper;
     private SharedPreferences prefs;
-
-    private SpeedDialView speedDialView;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -234,21 +226,24 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
         }
     }
 
+    private void resetViewState() {
+        recyclerAdapter = null;
+    }
+
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        if (recyclerAdapter != null) {
-            recyclerAdapter.endSelectMode();
-        }
-        recyclerAdapter = null;
+        resetViewState();
     }
 
     private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker =
             () -> DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
 
     private void refreshToolbarState() {
-        toolbar.getMenu().findItem(R.id.queue_lock).setChecked(UserPreferences.isQueueLocked());
+        MenuItemUtils.refreshLockItem(getActivity(), toolbar.getMenu());
         boolean keepSorted = UserPreferences.isQueueKeepSorted();
+        toolbar.getMenu().findItem(R.id.queue_lock).setVisible(!keepSorted);
+
         toolbar.getMenu().findItem(R.id.queue_sort_random).setVisible(!keepSorted);
         toolbar.getMenu().findItem(R.id.queue_keep_sorted).setChecked(keepSorted);
         isUpdatingFeeds = MenuItemUtils.updateRefreshMenuItem(toolbar.getMenu(),
@@ -257,79 +252,82 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
 
     @Override
     public boolean onMenuItemClick(MenuItem item) {
-        final int itemId = item.getItemId();
-        if (itemId == R.id.queue_lock) {
-            toggleQueueLock();
-            return true;
-        } else if (itemId == R.id.refresh_item) {
-            AutoUpdateManager.runImmediate(requireContext());
-            return true;
-        } else if (itemId == R.id.clear_queue) {
-            // make sure the user really wants to clear the queue
-            ConfirmationDialog conDialog = new ConfirmationDialog(getActivity(),
-                    R.string.clear_queue_label,
-                    R.string.clear_queue_confirmation_msg) {
+        switch (item.getItemId()) {
+            case R.id.queue_lock:
+                toggleQueueLock();
+                return true;
+            case R.id.refresh_item:
+                AutoUpdateManager.runImmediate(requireContext());
+                return true;
+            case R.id.clear_queue:
+                // make sure the user really wants to clear the queue
+                ConfirmationDialog conDialog = new ConfirmationDialog(getActivity(),
+                        R.string.clear_queue_label,
+                        R.string.clear_queue_confirmation_msg) {
 
-                @Override
-                public void onConfirmButtonPressed(
-                        DialogInterface dialog) {
-                    dialog.dismiss();
-                    DBWriter.clearQueue();
+                    @Override
+                    public void onConfirmButtonPressed(
+                            DialogInterface dialog) {
+                        dialog.dismiss();
+                        DBWriter.clearQueue();
+                    }
+                };
+                conDialog.createNewDialog().show();
+                return true;
+            case R.id.episode_actions:
+                ((MainActivity) requireActivity()).loadChildFragment(
+                        EpisodesApplyActionFragment.newInstance(queue,
+                                ACTION_DELETE | ACTION_REMOVE_FROM_QUEUE  | ACTION_DOWNLOAD));
+                return true;
+            case R.id.queue_sort_episode_title_asc:
+                setSortOrder(SortOrder.EPISODE_TITLE_A_Z);
+                return true;
+            case R.id.queue_sort_episode_title_desc:
+                setSortOrder(SortOrder.EPISODE_TITLE_Z_A);
+                return true;
+            case R.id.queue_sort_date_asc:
+                setSortOrder(SortOrder.DATE_OLD_NEW);
+                return true;
+            case R.id.queue_sort_date_desc:
+                setSortOrder(SortOrder.DATE_NEW_OLD);
+                return true;
+            case R.id.queue_sort_duration_asc:
+                setSortOrder(SortOrder.DURATION_SHORT_LONG);
+                return true;
+            case R.id.queue_sort_duration_desc:
+                setSortOrder(SortOrder.DURATION_LONG_SHORT);
+                return true;
+            case R.id.queue_sort_feed_title_asc:
+                setSortOrder(SortOrder.FEED_TITLE_A_Z);
+                return true;
+            case R.id.queue_sort_feed_title_desc:
+                setSortOrder(SortOrder.FEED_TITLE_Z_A);
+                return true;
+            case R.id.queue_sort_random:
+                setSortOrder(SortOrder.RANDOM);
+                return true;
+            case R.id.queue_sort_smart_shuffle_asc:
+                setSortOrder(SortOrder.SMART_SHUFFLE_OLD_NEW);
+                return true;
+            case R.id.queue_sort_smart_shuffle_desc:
+                setSortOrder(SortOrder.SMART_SHUFFLE_NEW_OLD);
+                return true;
+            case R.id.queue_keep_sorted:
+                boolean keepSortedOld = UserPreferences.isQueueKeepSorted();
+                boolean keepSortedNew = !keepSortedOld;
+                UserPreferences.setQueueKeepSorted(keepSortedNew);
+                if (keepSortedNew) {
+                    SortOrder sortOrder = UserPreferences.getQueueKeepSortedOrder();
+                    DBWriter.reorderQueue(sortOrder, true);
                 }
-            };
-            conDialog.createNewDialog().show();
-            return true;
-        } else if (itemId == R.id.queue_sort_episode_title_asc) {
-            setSortOrder(SortOrder.EPISODE_TITLE_A_Z);
-            return true;
-        } else if (itemId == R.id.queue_sort_episode_title_desc) {
-            setSortOrder(SortOrder.EPISODE_TITLE_Z_A);
-            return true;
-        } else if (itemId == R.id.queue_sort_date_asc) {
-            setSortOrder(SortOrder.DATE_OLD_NEW);
-            return true;
-        } else if (itemId == R.id.queue_sort_date_desc) {
-            setSortOrder(SortOrder.DATE_NEW_OLD);
-            return true;
-        } else if (itemId == R.id.queue_sort_duration_asc) {
-            setSortOrder(SortOrder.DURATION_SHORT_LONG);
-            return true;
-        } else if (itemId == R.id.queue_sort_duration_desc) {
-            setSortOrder(SortOrder.DURATION_LONG_SHORT);
-            return true;
-        } else if (itemId == R.id.queue_sort_feed_title_asc) {
-            setSortOrder(SortOrder.FEED_TITLE_A_Z);
-            return true;
-        } else if (itemId == R.id.queue_sort_feed_title_desc) {
-            setSortOrder(SortOrder.FEED_TITLE_Z_A);
-            return true;
-        } else if (itemId == R.id.queue_sort_random) {
-            setSortOrder(SortOrder.RANDOM);
-            return true;
-        } else if (itemId == R.id.queue_sort_smart_shuffle_asc) {
-            setSortOrder(SortOrder.SMART_SHUFFLE_OLD_NEW);
-            return true;
-        } else if (itemId == R.id.queue_sort_smart_shuffle_desc) {
-            setSortOrder(SortOrder.SMART_SHUFFLE_NEW_OLD);
-            return true;
-        } else if (itemId == R.id.queue_keep_sorted) {
-            boolean keepSortedOld = UserPreferences.isQueueKeepSorted();
-            boolean keepSortedNew = !keepSortedOld;
-            UserPreferences.setQueueKeepSorted(keepSortedNew);
-            if (keepSortedNew) {
-                SortOrder sortOrder = UserPreferences.getQueueKeepSortedOrder();
-                DBWriter.reorderQueue(sortOrder, true);
-            }
-            if (recyclerAdapter != null) {
-                recyclerAdapter.updateDragDropEnabled();
-            }
-            refreshToolbarState();
-            return true;
-        } else if (itemId == R.id.action_search) {
-            ((MainActivity) getActivity()).loadChildFragment(SearchFragment.newInstance());
-            return true;
+                if (recyclerAdapter != null) {
+                    recyclerAdapter.updateDragDropEnabled();
+                }
+                refreshToolbarState();
+                return true;
+            default:
+                return false;
         }
-        return false;
     }
 
     private void toggleQueueLock() {
@@ -390,7 +388,7 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
         if (!isVisible() || recyclerAdapter == null) {
             return false;
         }
-        FeedItem selectedItem = recyclerAdapter.getLongPressedItem();
+        FeedItem selectedItem = recyclerAdapter.getSelectedItem();
         if (selectedItem == null) {
             Log.i(TAG, "Selected item was null, ignoring selection");
             return super.onContextItemSelected(item);
@@ -401,24 +399,23 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
             Log.i(TAG, "Selected item no longer exist, ignoring selection");
             return super.onContextItemSelected(item);
         }
-        if (recyclerAdapter.onContextItemSelected(item)) {
-            return true;
-        }
 
-        final int itemId = item.getItemId();
-        if (itemId == R.id.move_to_top_item) {
-            queue.add(0, queue.remove(position));
-            recyclerAdapter.notifyItemMoved(position, 0);
-            DBWriter.moveQueueItemToTop(selectedItem.getId(), true);
-            return true;
-        } else if (itemId == R.id.move_to_bottom_item) {
-            queue.add(queue.size() - 1, queue.remove(position));
-            recyclerAdapter.notifyItemMoved(position, queue.size() - 1);
-            DBWriter.moveQueueItemToBottom(selectedItem.getId(), true);
-            return true;
+        switch(item.getItemId()) {
+            case R.id.move_to_top_item:
+                queue.add(0, queue.remove(position));
+                recyclerAdapter.notifyItemMoved(position, 0);
+                DBWriter.moveQueueItemToTop(selectedItem.getId(), true);
+                return true;
+            case R.id.move_to_bottom_item:
+                queue.add(queue.size()-1, queue.remove(position));
+                recyclerAdapter.notifyItemMoved(position, queue.size()-1);
+                DBWriter.moveQueueItemToBottom(selectedItem.getId(), true);
+                return true;
+            default:
+                return FeedItemMenuHandler.onMenuItemClicked(this, item.getItemId(), selectedItem);
         }
-        return FeedItemMenuHandler.onMenuItemClicked(this, item.getItemId(), selectedItem);
     }
+
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -432,6 +429,7 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
         }
         ((MainActivity) getActivity()).setupToolbarToggle(toolbar, displayUpArrow);
         toolbar.inflateMenu(R.menu.queue);
+        MenuItemUtils.setupSearchItem(toolbar.getMenu(), (MainActivity) getActivity(), 0, "");
         refreshToolbarState();
 
         infoBar = root.findViewById(R.id.info_bar);
@@ -443,54 +441,99 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
         recyclerView.setRecycledViewPool(((MainActivity) getActivity()).getRecycledViewPool());
         registerForContextMenu(recyclerView);
 
-        SwipeRefreshLayout swipeRefreshLayout = root.findViewById(R.id.swipeRefresh);
-        swipeRefreshLayout.setDistanceToTriggerSync(getResources().getInteger(R.integer.swipe_refresh_distance));
-        swipeRefreshLayout.setOnRefreshListener(() -> {
-            AutoUpdateManager.runImmediate(requireContext());
-            new Handler(Looper.getMainLooper()).postDelayed(() -> swipeRefreshLayout.setRefreshing(false),
-                    getResources().getInteger(R.integer.swipe_to_refresh_duration_in_ms));
-        });
+        itemTouchHelper = new ItemTouchHelper(
+            new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN,
+                    ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
 
-        swipeActions = new QueueSwipeActions();
-        swipeActions.setFilter(new FeedItemFilter(FeedItemFilter.QUEUED));
-        swipeActions.attachTo(recyclerView);
+                // Position tracking whilst dragging
+                int dragFrom = -1;
+                int dragTo = -1;
+
+                @Override
+                public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
+                                      RecyclerView.ViewHolder target) {
+                    int fromPosition = viewHolder.getAdapterPosition();
+                    int toPosition = target.getAdapterPosition();
+
+                    // Update tracked position
+                    if (dragFrom == -1) {
+                        dragFrom =  fromPosition;
+                    }
+                    dragTo = toPosition;
+
+                    int from = viewHolder.getAdapterPosition();
+                    int to = target.getAdapterPosition();
+                    Log.d(TAG, "move(" + from + ", " + to + ") in memory");
+                    if (from >= queue.size() || to >= queue.size() || from < 0 || to < 0) {
+                        return false;
+                    }
+                    queue.add(to, queue.remove(from));
+                    recyclerAdapter.notifyItemMoved(from, to);
+                    return true;
+                }
+
+                @Override
+                public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
+                    if (disposable != null) {
+                        disposable.dispose();
+                    }
+                    final int position = viewHolder.getAdapterPosition();
+                    Log.d(TAG, "remove(" + position + ")");
+                    final FeedItem item = queue.get(position);
+                    final boolean isRead = item.isPlayed();
+                    DBWriter.markItemPlayed(FeedItem.PLAYED, false, item.getId());
+                    DBWriter.removeQueueItem(getActivity(), true, item);
+
+                    ((MainActivity) getActivity()).showSnackbarAbovePlayer(
+                            item.hasMedia() ? R.string.marked_as_read_label : R.string.marked_as_read_no_media_label,
+                            Snackbar.LENGTH_LONG)
+                            .setAction(getString(R.string.undo), v -> {
+                                DBWriter.addQueueItemAt(getActivity(), item.getId(), position, false);
+                                if (!isRead) {
+                                    DBWriter.markItemPlayed(FeedItem.UNPLAYED, item.getId());
+                                }
+                            });
+                }
+
+                @Override
+                public boolean isLongPressDragEnabled() {
+                    return false;
+                }
+
+                @Override
+                public boolean isItemViewSwipeEnabled() {
+                    return !UserPreferences.isQueueLocked();
+                }
+
+                @Override
+                public void clearView(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
+                    super.clearView(recyclerView, viewHolder);
+                    // Check if drag finished
+                    if (dragFrom != -1 && dragTo != -1 && dragFrom != dragTo) {
+                        reallyMoved(dragFrom, dragTo);
+                    }
+
+                    dragFrom = dragTo = -1;
+                }
+
+                private void reallyMoved(int from, int to) {
+                    // Write drag operation to database
+                    Log.d(TAG, "Write to database move(" + from + ", " + to + ")");
+                    DBWriter.moveQueueItem(from, to, true);
+                }
+            }
+        );
+        itemTouchHelper.attachToRecyclerView(recyclerView);
 
         emptyView = new EmptyViewHandler(getContext());
         emptyView.attachToRecyclerView(recyclerView);
-        emptyView.setIcon(R.drawable.ic_playlist);
+        emptyView.setIcon(R.attr.stat_playlist);
         emptyView.setTitle(R.string.no_items_header_label);
         emptyView.setMessage(R.string.no_items_label);
 
         progLoading = root.findViewById(R.id.progLoading);
         progLoading.setVisibility(View.VISIBLE);
 
-        speedDialView = root.findViewById(R.id.fabSD);
-        speedDialView.setOverlayLayout(root.findViewById(R.id.fabSDOverlay));
-        speedDialView.inflate(R.menu.episodes_apply_action_speeddial);
-        speedDialView.removeActionItemById(R.id.mark_read_batch);
-        speedDialView.removeActionItemById(R.id.mark_unread_batch);
-        speedDialView.removeActionItemById(R.id.add_to_queue_batch);
-        speedDialView.setOnChangeListener(new SpeedDialView.OnChangeListener() {
-            @Override
-            public boolean onMainActionSelected() {
-                return false;
-            }
-
-            @Override
-            public void onToggleChanged(boolean open) {
-                if (open && recyclerAdapter.getSelectedCount() == 0) {
-                    ((MainActivity) getActivity()).showSnackbarAbovePlayer(R.string.no_items_selected,
-                            Snackbar.LENGTH_SHORT);
-                    speedDialView.close();
-                }
-            }
-        });
-        speedDialView.setOnActionSelectedListener(actionItem -> {
-            new EpisodeMultiSelectActionHandler(((MainActivity) getActivity()), recyclerAdapter.getSelectedItems())
-                    .handleAction(actionItem.getId());
-            recyclerAdapter.endSelectMode();
-            return true;
-        });
         return root;
     }
 
@@ -501,18 +544,19 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
     }
 
     private void onFragmentLoaded(final boolean restoreScrollPosition) {
-        if (queue != null) {
+        if (queue != null && queue.size() > 0) {
             if (recyclerAdapter == null) {
                 MainActivity activity = (MainActivity) getActivity();
-                recyclerAdapter = new QueueRecyclerAdapter(activity, swipeActions);
-                recyclerAdapter.setOnSelectModeListener(this);
+                recyclerAdapter = new QueueRecyclerAdapter(activity, itemTouchHelper);
                 recyclerView.setAdapter(recyclerAdapter);
                 emptyView.updateAdapter(recyclerAdapter);
             }
             recyclerAdapter.updateItems(queue);
+            recyclerView.setVisibility(View.VISIBLE);
         } else {
             recyclerAdapter = null;
-            emptyView.updateAdapter(null);
+            recyclerView.setVisibility(View.GONE);
+            emptyView.updateAdapter(recyclerAdapter);
         }
 
         if (restoreScrollPosition) {
@@ -554,6 +598,7 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
             disposable.dispose();
         }
         if (queue == null) {
+            recyclerView.setVisibility(View.GONE);
             emptyView.hide();
             progLoading.setVisibility(View.VISIBLE);
         }
@@ -568,93 +613,5 @@ public class QueueFragment extends Fragment implements Toolbar.OnMenuItemClickLi
                         recyclerAdapter.notifyDataSetChanged();
                     }
                 }, error -> Log.e(TAG, Log.getStackTraceString(error)));
-    }
-
-    @Override
-    public void onStartSelectMode() {
-        swipeActions.detach();
-        speedDialView.setVisibility(View.VISIBLE);
-        refreshToolbarState();
-        infoBar.setVisibility(View.GONE);
-    }
-
-    @Override
-    public void onEndSelectMode() {
-        speedDialView.close();
-        speedDialView.setVisibility(View.GONE);
-        infoBar.setVisibility(View.VISIBLE);
-        swipeActions.attachTo(recyclerView);
-    }
-
-    private class QueueSwipeActions extends SwipeActions {
-
-        // Position tracking whilst dragging
-        int dragFrom = -1;
-        int dragTo = -1;
-
-        public QueueSwipeActions() {
-            super(ItemTouchHelper.UP | ItemTouchHelper.DOWN, QueueFragment.this, TAG);
-        }
-
-        @Override
-        public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder,
-                              @NonNull RecyclerView.ViewHolder target) {
-            int fromPosition = viewHolder.getBindingAdapterPosition();
-            int toPosition = target.getBindingAdapterPosition();
-
-            // Update tracked position
-            if (dragFrom == -1) {
-                dragFrom =  fromPosition;
-            }
-            dragTo = toPosition;
-
-            int from = viewHolder.getBindingAdapterPosition();
-            int to = target.getBindingAdapterPosition();
-            Log.d(TAG, "move(" + from + ", " + to + ") in memory");
-            if (from >= queue.size() || to >= queue.size() || from < 0 || to < 0) {
-                return false;
-            }
-            queue.add(to, queue.remove(from));
-            recyclerAdapter.notifyItemMoved(from, to);
-            return true;
-        }
-
-        @Override
-        public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
-            if (disposable != null) {
-                disposable.dispose();
-            }
-
-            //SwipeActions
-            super.onSwiped(viewHolder, direction);
-        }
-
-        @Override
-        public boolean isLongPressDragEnabled() {
-            return false;
-        }
-
-        @Override
-        public boolean isItemViewSwipeEnabled() {
-            return !UserPreferences.isQueueLocked();
-        }
-
-        @Override
-        public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            super.clearView(recyclerView, viewHolder);
-            // Check if drag finished
-            if (dragFrom != -1 && dragTo != -1 && dragFrom != dragTo) {
-                reallyMoved(dragFrom, dragTo);
-            }
-
-            dragFrom = dragTo = -1;
-        }
-
-        private void reallyMoved(int from, int to) {
-            // Write drag operation to database
-            Log.d(TAG, "Write to database move(" + from + ", " + to + ")");
-            DBWriter.moveQueueItem(from, to, true);
-        }
-
     }
 }

@@ -1,5 +1,7 @@
 package de.danoeh.antennapod.fragment;
 
+import android.content.Context;
+import android.content.DialogInterface;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -14,20 +16,20 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.SwitchPreferenceCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.core.dialog.ConfirmationDialog;
 import de.danoeh.antennapod.core.event.settings.SkipIntroEndingChangedEvent;
 import de.danoeh.antennapod.core.event.settings.SpeedPresetChangedEvent;
 import de.danoeh.antennapod.core.event.settings.VolumeAdaptionChangedEvent;
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedFilter;
-import de.danoeh.antennapod.model.feed.FeedPreferences;
-import de.danoeh.antennapod.model.feed.VolumeAdaptionSetting;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedFilter;
+import de.danoeh.antennapod.core.feed.FeedPreferences;
+import de.danoeh.antennapod.core.feed.VolumeAdaptionSetting;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBWriter;
 import de.danoeh.antennapod.dialog.AuthenticationDialog;
 import de.danoeh.antennapod.dialog.EpisodeFilterDialog;
 import de.danoeh.antennapod.dialog.FeedPreferenceSkipDialog;
-import de.danoeh.antennapod.dialog.TagSettingsDialog;
 import io.reactivex.Maybe;
 import io.reactivex.MaybeOnSubscribe;
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -39,7 +41,7 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Locale;
 
-import static de.danoeh.antennapod.model.feed.FeedPreferences.SPEED_USE_GLOBAL;
+import static de.danoeh.antennapod.core.feed.FeedPreferences.SPEED_USE_GLOBAL;
 
 public class FeedSettingsFragment extends Fragment {
     private static final String TAG = "FeedSettingsFragment";
@@ -103,7 +105,6 @@ public class FeedSettingsFragment extends Fragment {
         private static final CharSequence PREF_CATEGORY_AUTO_DOWNLOAD = "autoDownloadCategory";
         private static final String PREF_FEED_PLAYBACK_SPEED = "feedPlaybackSpeed";
         private static final String PREF_AUTO_SKIP = "feedAutoSkip";
-        private static final String PREF_TAGS = "tags";
         private static final DecimalFormat SPEED_FORMAT =
                 new DecimalFormat("0.00", DecimalFormatSymbols.getInstance(Locale.US));
 
@@ -159,7 +160,6 @@ public class FeedSettingsFragment extends Fragment {
                         setupPlaybackSpeedPreference();
                         setupFeedAutoSkipPreference();
                         setupEpisodeNotificationPreference();
-                        setupTags();
 
                         updateAutoDeleteSummary();
                         updateVolumeReductionValue();
@@ -381,6 +381,8 @@ public class FeedSettingsFragment extends Fragment {
                 feedPreferences.setAutoDownload(checked);
                 DBWriter.setFeedPreferences(feedPreferences);
                 updateAutoDownloadEnabled();
+                ApplyToEpisodesDialog dialog = new ApplyToEpisodesDialog(getActivity(), checked);
+                dialog.createNewDialog().show();
                 pref.setChecked(checked);
                 return false;
             });
@@ -391,13 +393,6 @@ public class FeedSettingsFragment extends Fragment {
                 boolean enabled = feed.getPreferences().getAutoDownload() && UserPreferences.isEnableAutodownload();
                 findPreference(PREF_EPISODE_FILTER).setEnabled(enabled);
             }
-        }
-
-        private void setupTags() {
-            findPreference(PREF_TAGS).setOnPreferenceClickListener(preference -> {
-                TagSettingsDialog.newInstance(feedPreferences).show(getChildFragmentManager(), TagSettingsDialog.TAG);
-                return true;
-            });
         }
 
         private void setupEpisodeNotificationPreference() {
@@ -411,6 +406,23 @@ public class FeedSettingsFragment extends Fragment {
                 pref.setChecked(checked);
                 return false;
             });
+        }
+
+        private class ApplyToEpisodesDialog extends ConfirmationDialog {
+            private final boolean autoDownload;
+
+            ApplyToEpisodesDialog(Context context, boolean autoDownload) {
+                super(context, R.string.auto_download_apply_to_items_title,
+                        R.string.auto_download_apply_to_items_message);
+                this.autoDownload = autoDownload;
+                setPositiveText(R.string.yes);
+                setNegativeText(R.string.no);
+            }
+
+            @Override
+            public void onConfirmButtonPressed(DialogInterface dialog) {
+                DBWriter.setFeedsItemsAutoDownload(feed, autoDownload);
+            }
         }
     }
 }

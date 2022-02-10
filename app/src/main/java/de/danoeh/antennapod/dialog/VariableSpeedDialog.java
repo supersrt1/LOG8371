@@ -1,17 +1,16 @@
 package de.danoeh.antennapod.dialog;
 
-import android.os.Build;
+import android.app.Dialog;
+import android.content.Context;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.snackbar.Snackbar;
 import de.danoeh.antennapod.R;
@@ -27,7 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-public class VariableSpeedDialog extends BottomSheetDialogFragment {
+public class VariableSpeedDialog extends DialogFragment {
     private SpeedSelectionAdapter adapter;
     private final DecimalFormat speedFormat;
     private PlaybackController controller;
@@ -40,6 +39,16 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
         format.setDecimalSeparator('.');
         speedFormat = new DecimalFormat("0.00", format);
         selectedSpeeds = new ArrayList<>(UserPreferences.getPlaybackSpeedArray());
+    }
+
+    public static void showGetPluginDialog(final Context context) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(R.string.no_playback_plugin_title);
+        builder.setMessage(R.string.no_playback_plugin_or_sonic_msg);
+        builder.setPositiveButton(R.string.enable_sonic, (dialog, which) ->
+                UserPreferences.enableSonic());
+        builder.setNeutralButton(R.string.close_label, null);
+        builder.show();
     }
 
     @Override
@@ -72,10 +81,12 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
         controller = null;
     }
 
-    @Nullable
+    @NonNull
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-                             @Nullable Bundle savedInstanceState) {
+    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setPositiveButton(R.string.close_label, null);
+
         View root = View.inflate(getContext(), R.layout.speed_select_dialog, null);
         speedSeekBar = root.findViewById(R.id.speed_seek_bar);
         RecyclerView selectedSpeedsGrid = root.findViewById(R.id.selected_speeds_grid);
@@ -87,10 +98,12 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
 
         addCurrentSpeedChip = root.findViewById(R.id.add_current_speed_chip);
         addCurrentSpeedChip.setCloseIconVisible(true);
-        addCurrentSpeedChip.setCloseIconResource(R.drawable.ic_add);
+        addCurrentSpeedChip.setCloseIconResource(R.drawable.ic_add_black);
         addCurrentSpeedChip.setOnCloseIconClickListener(v -> addCurrentSpeed());
         addCurrentSpeedChip.setOnClickListener(v -> addCurrentSpeed());
-        return root;
+
+        builder.setView(root);
+        return builder.create();
     }
 
     private void addCurrentSpeed() {
@@ -112,9 +125,8 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
         @NonNull
         public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             Chip chip = new Chip(getContext());
-            if (Build.VERSION.SDK_INT >= 17) {
-                chip.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-            }
+            chip.setCloseIconVisible(true);
+            chip.setCloseIconResource(R.drawable.ic_delete_black);
             return new ViewHolder(chip);
         }
 
@@ -123,19 +135,16 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
             float speed = selectedSpeeds.get(position);
 
             holder.chip.setText(speedFormat.format(speed));
-            holder.chip.setOnLongClickListener(v -> {
+            holder.chip.setOnCloseIconClickListener(v -> {
                 selectedSpeeds.remove(speed);
                 UserPreferences.setPlaybackSpeedArray(selectedSpeeds);
                 notifyDataSetChanged();
-                return true;
             });
             holder.chip.setOnClickListener(v -> {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (controller != null) {
-                        dismiss();
-                        controller.setPlaybackSpeed(speed);
-                    }
-                }, 200);
+                if (controller != null) {
+                    controller.setPlaybackSpeed(speed);
+                    notifyDataSetChanged();
+                }
             });
         }
 
