@@ -6,44 +6,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-    <!--
-        While the same visuals could be achieved without this nested layout,
-        RelativeLayout invalidates all its direct children when the playback
-        position is updated. This causes flickering of the tabs every second.
-    -->
-    <LinearLayout
-            android:id="@+id/pagerContainer"
+    <androidx.appcompat.widget.Toolbar
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="?attr/actionBarSize"
+            android:theme="?attr/actionBarTheme"
             android:layout_alignParentTop="true"
-            android:layout_above="@id/playtime_layout"
-            android:orientation="vertical"
-            android:layout_marginBottom="12dp">
-
-        <androidx.appcompat.widget.Toolbar
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="?attr/actionBarSize"
-                android:theme="?attr/actionBarTheme"
-                app:navigationIcon="?homeAsUpIndicator"
-                android:id="@+id/toolbar"/>
-
-        <com.google.android.material.tabs.TabLayout
-                android:id="@+id/sliding_tabs"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?android:attr/windowBackground"
-                app:tabBackground="?attr/selectableItemBackground"
-                app:tabMode="fixed"
-                app:tabGravity="fill"/>
-
-        <androidx.viewpager2.widget.ViewPager2
-                android:id="@+id/pager"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:foreground="?android:windowContentOverlay"/>
-    </LinearLayout>
+            app:navigationIcon="?homeAsUpIndicator"
+            android:id="@+id/toolbar"/>
 
     <FrameLayout
             android:id="@+id/playerFragment"
@@ -54,11 +24,21 @@
             tools:layout_height="@dimen/external_player_height"
             android:elevation="8dp"/>
 
+    <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/pager"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_above="@id/playtime_layout"
+            android:layout_below="@id/toolbar"
+            android:layout_marginBottom="12dp"
+            android:foreground="?android:windowContentOverlay"
+            android:orientation="vertical" />
+
     <ImageView
             android:layout_width="match_parent"
             android:layout_height="8dp"
-            android:layout_alignBottom="@id/pagerContainer"
-            android:src="@drawable/bg_gradient"
+            android:layout_alignBottom="@id/pager"
+            app:srcCompat="@drawable/bg_gradient"
             app:tint="?android:attr/windowBackground"
             android:importantForAccessibility="no"/>
 
@@ -67,7 +47,9 @@
             android:alpha="0"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignBottom="@+id/pagerContainer"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
+            android:layout_alignBottom="@+id/pager"
             android:layout_centerHorizontal="true"
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="8dp"
@@ -85,7 +67,7 @@
                 android:paddingRight="24dp"
                 android:paddingBottom="4dp"
                 android:textColor="@color/white"
-                android:textSize="24sp"
+                android:textSize="16sp"
                 tools:text="1:06:29" />
 
     </androidx.cardview.widget.CardView>
@@ -98,7 +80,7 @@
             android:layoutDirection="ltr"
             android:orientation="vertical">
 
-        <SeekBar
+        <de.danoeh.antennapod.view.ChapterSeekBar
                 android:id="@+id/sbPosition"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -149,7 +131,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp">
 
-            <ImageButton
+            <de.danoeh.antennapod.view.PlayButton
                     android:id="@+id/butPlay"
                     android:layout_width="@dimen/audioplayer_playercontrols_length_big"
                     android:layout_height="@dimen/audioplayer_playercontrols_length_big"
@@ -162,9 +144,9 @@
                     android:layout_centerVertical="true"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/pause_label"
-                    app:srcCompat="?attr/av_play"
+                    app:srcCompat="@drawable/ic_play_48dp"
                     android:scaleType="fitCenter"
-                    tools:srcCompat="@drawable/ic_av_play_white_24dp"/>
+                    tools:srcCompat="@drawable/ic_play_48dp"/>
 
             <de.danoeh.antennapod.ui.common.CircularProgressBar
                     android:layout_width="@dimen/audioplayer_playercontrols_length_big"
@@ -197,9 +179,9 @@
                     android:layout_centerVertical="true"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/rewind_label"
-                    app:srcCompat="?attr/av_rewind"
+                    app:srcCompat="@drawable/ic_fast_rewind"
                     android:scaleType="fitCenter"
-                    tools:srcCompat="@drawable/ic_av_fast_rewind_white_48dp"/>
+                    tools:srcCompat="@drawable/ic_fast_rewind"/>
 
             <TextView
                     android:id="@+id/txtvRev"
@@ -225,7 +207,7 @@
                     android:layout_centerVertical="true"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/playback_speed"
-                    tools:srcCompat="@drawable/ic_playback_speed_white"
+                    tools:srcCompat="@drawable/ic_playback_speed"
                     app:foregroundColor="?attr/action_icon_color"/>
 
             <TextView
@@ -254,9 +236,9 @@
                     android:layout_centerVertical="true"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/fast_forward_label"
-                    app:srcCompat="?attr/av_fast_forward"
+                    app:srcCompat="@drawable/ic_fast_forward"
                     android:scaleType="fitCenter"
-                    tools:srcCompat="@drawable/ic_av_fast_forward_white_48dp"/>
+                    tools:srcCompat="@drawable/ic_fast_forward"/>
 
             <TextView
                     android:id="@+id/txtvFF"
@@ -282,9 +264,9 @@
                     android:layout_centerVertical="true"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:scaleType="fitCenter"
-                    app:srcCompat="?attr/av_skip"
+                    app:srcCompat="@drawable/ic_skip_48dp"
                     android:contentDescription="@string/skip_episode_label"
-                    tools:srcCompat="@drawable/ic_av_skip_white_48dp"/>
+                    tools:srcCompat="@drawable/ic_skip_48dp"/>
         </RelativeLayout>
 
     </LinearLayout>
