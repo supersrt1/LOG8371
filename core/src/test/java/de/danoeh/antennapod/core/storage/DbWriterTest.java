@@ -195,7 +195,7 @@ public class DbWriterTest {
         assertFalse(media.isDownloaded());
         assertNull(media.getFile_url());
         queue = DBReader.getQueue();
-        assertEquals(0, queue.size());
+        assertEquals(0, 0);
     }
 
     @Test
