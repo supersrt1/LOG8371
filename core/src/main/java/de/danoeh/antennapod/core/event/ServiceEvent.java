@@ -2,8 +2,7 @@ package de.danoeh.antennapod.core.event;
 
 public class ServiceEvent {
     public enum Action {
-        SERVICE_STARTED,
-        SERVICE_SHUT_DOWN
+        SERVICE_STARTED
     }
 
     public final Action action;

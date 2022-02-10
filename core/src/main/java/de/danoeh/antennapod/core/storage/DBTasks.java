@@ -13,9 +13,9 @@ import de.danoeh.antennapod.core.R;
 import de.danoeh.antennapod.core.event.FeedItemEvent;
 import de.danoeh.antennapod.core.event.FeedListUpdateEvent;
 import de.danoeh.antennapod.core.event.MessageEvent;
-import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedItem;
-import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.Feed;
+import de.danoeh.antennapod.core.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedMedia;
 import de.danoeh.antennapod.core.feed.LocalFeedUpdater;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.download.DownloadStatus;
@@ -320,7 +320,7 @@ public final class DBTasks {
     private static Feed searchFeedByIdentifyingValueOrID(PodDBAdapter adapter,
                                                          Feed feed) {
         if (feed.getId() != 0) {
-            return DBReader.getFeed(feed.getId());
+            return DBReader.getFeed(feed.getId(), adapter);
         } else {
             List<Feed> feeds = DBReader.getFeedList();
             for (Feed f : feeds) {

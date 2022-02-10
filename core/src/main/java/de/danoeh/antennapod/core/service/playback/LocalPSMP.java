@@ -14,7 +14,6 @@ import android.view.SurfaceHolder;
 import androidx.media.AudioAttributesCompat;
 import androidx.media.AudioFocusRequestCompat;
 import androidx.media.AudioManagerCompat;
-import de.danoeh.antennapod.core.storage.DBReader;
 import org.antennapod.audio.MediaPlayer;
 
 import java.io.File;
@@ -29,16 +28,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
-import de.danoeh.antennapod.model.feed.FeedMedia;
-import de.danoeh.antennapod.model.feed.FeedPreferences;
-import de.danoeh.antennapod.model.playback.MediaType;
-import de.danoeh.antennapod.model.feed.VolumeAdaptionSetting;
+import de.danoeh.antennapod.core.feed.FeedMedia;
+import de.danoeh.antennapod.core.feed.FeedPreferences;
+import de.danoeh.antennapod.core.feed.MediaType;
+import de.danoeh.antennapod.core.feed.VolumeAdaptionSetting;
 import de.danoeh.antennapod.core.feed.util.PlaybackSpeedUtils;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.util.RewindAfterPauseUtils;
 import de.danoeh.antennapod.core.util.playback.AudioPlayer;
 import de.danoeh.antennapod.core.util.playback.IPlayer;
-import de.danoeh.antennapod.model.playback.Playable;
+import de.danoeh.antennapod.core.util.playback.Playable;
+import de.danoeh.antennapod.core.util.playback.PlayableException;
 import de.danoeh.antennapod.core.util.playback.PlaybackServiceStarter;
 import de.danoeh.antennapod.core.util.playback.VideoPlayer;
 
@@ -218,7 +218,7 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
      * <p/>
      * This method requires the playerLock and is executed on the caller's thread.
      *
-     * @see #playMediaObject(Playable, boolean, boolean, boolean)
+     * @see #playMediaObject(de.danoeh.antennapod.core.util.playback.Playable, boolean, boolean, boolean)
      */
     private void playMediaObject(@NonNull final Playable playable, final boolean forceReset, final boolean stream, final boolean startWhenPrepared, final boolean prepareImmediately) {
         if (!playerLock.isHeldByCurrentThread()) {
@@ -259,9 +259,7 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
         LocalPSMP.this.startWhenPrepared.set(startWhenPrepared);
         setPlayerStatus(PlayerStatus.INITIALIZING, media);
         try {
-            if (media instanceof FeedMedia && ((FeedMedia) media).getItem() == null) {
-                ((FeedMedia) media).setItem(DBReader.getFeedItem(((FeedMedia) media).getItemId()));
-            }
+            media.loadMetadata();
             callback.onMediaChanged(false);
             setPlaybackParams(PlaybackSpeedUtils.getCurrentPlaybackSpeed(media), UserPreferences.isSkipSilence());
             if (stream) {
@@ -291,7 +289,7 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
                 onPrepared(startWhenPrepared);
             }
 
-        } catch (IOException | IllegalStateException e) {
+        } catch (PlayableException | IOException | IllegalStateException e) {
             e.printStackTrace();
             setPlayerStatus(PlayerStatus.ERROR, null);
         }
@@ -608,13 +606,23 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
     }
 
     /**
+     * Returns true if the playback speed can be adjusted.
+     */
+    @Override
+    public boolean canSetSpeed() {
+        return mediaPlayer != null && mediaPlayer.canSetSpeed();
+    }
+
+    /**
      * Sets the playback speed.
      * This method is executed on the caller's thread.
      */
     private void setSpeedSyncAndSkipSilence(float speed, boolean skipSilence) {
         playerLock.lock();
-        Log.d(TAG, "Playback speed was set to " + speed);
-        callback.playbackSpeedChanged(speed);
+        if (mediaPlayer.canSetSpeed()) {
+            Log.d(TAG, "Playback speed was set to " + speed);
+            callback.playbackSpeedChanged(speed);
+        }
         mediaPlayer.setPlaybackParams(speed, skipSilence);
         playerLock.unlock();
     }
@@ -641,7 +649,7 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
         if ((playerStatus == PlayerStatus.PLAYING
                 || playerStatus == PlayerStatus.PAUSED
                 || playerStatus == PlayerStatus.INITIALIZED
-                || playerStatus == PlayerStatus.PREPARED)) {
+                || playerStatus == PlayerStatus.PREPARED) && mediaPlayer.canSetSpeed()) {
             retVal = mediaPlayer.getCurrentSpeedMultiplier();
         }
         playerLock.unlock();
@@ -1038,6 +1046,7 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
             ap.setOnErrorListener(audioErrorListener);
             ap.setOnBufferingUpdateListener(audioBufferingUpdateListener);
             ap.setOnInfoListener(audioInfoListener);
+            ap.setOnSpeedAdjustmentAvailableChangedListener(audioSetSpeedAbilityListener);
         } else if (mp instanceof ExoPlayerWrapper) {
             ExoPlayerWrapper ap = (ExoPlayerWrapper) mp;
             ap.setOnCompletionListener(audioCompletionListener);
@@ -1080,6 +1089,10 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
     private boolean genericInfoListener(int what) {
         return callback.onMediaPlayerInfo(what, 0);
     }
+
+    private final MediaPlayer.OnSpeedAdjustmentAvailableChangedListener audioSetSpeedAbilityListener =
+            (arg0, speedAdjustmentAvailable) -> callback.setSpeedAbilityChanged();
+
 
     private final MediaPlayer.OnErrorListener audioErrorListener =
             (mp, what, extra) -> {

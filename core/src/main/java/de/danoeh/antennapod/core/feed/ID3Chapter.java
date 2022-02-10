@@ -1,7 +1,5 @@
 package de.danoeh.antennapod.core.feed;
 
-import de.danoeh.antennapod.model.feed.Chapter;
-
 public class ID3Chapter extends Chapter {
     public static final int CHAPTERTYPE_ID3CHAPTER = 2;
 
@@ -22,8 +20,8 @@ public class ID3Chapter extends Chapter {
 
     @Override
     public String toString() {
-        return "ID3Chapter [id3ID=" + id3ID + ", title=" + getTitle() + ", start="
-                + getStart() + ", url=" + getLink() + "]";
+        return "ID3Chapter [id3ID=" + id3ID + ", title=" + title + ", start="
+                + start + ", url=" + link + "]";
     }
 
     @Override

@@ -1,7 +1,5 @@
 package de.danoeh.antennapod.core.feed;
 
-import de.danoeh.antennapod.model.feed.Chapter;
-
 public class SimpleChapter extends Chapter {
     public static final int CHAPTERTYPE_SIMPLECHAPTER = 0;
 

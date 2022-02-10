@@ -6,10 +6,10 @@ import java.util.List;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import de.danoeh.antennapod.core.service.download.AntennapodHttpClient;
-import de.danoeh.antennapod.net.sync.gpoddernet.GpodnetService;
-import de.danoeh.antennapod.net.sync.gpoddernet.GpodnetServiceException;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetDevice;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetTag;
+import de.danoeh.antennapod.core.sync.gpoddernet.GpodnetService;
+import de.danoeh.antennapod.core.sync.gpoddernet.GpodnetServiceException;
+import de.danoeh.antennapod.core.sync.gpoddernet.model.GpodnetDevice;
+import de.danoeh.antennapod.core.sync.gpoddernet.model.GpodnetTag;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -28,16 +28,14 @@ public class GPodnetServiceTest {
 
     private static final String USER = "";
     private static final String PW = "";
-    private static final String DEVICE_ID = "radio";
 
     @Before
     public void setUp() {
-        service = new GpodnetService(AntennapodHttpClient.getHttpClient(),
-                GpodnetService.DEFAULT_BASE_HOST, DEVICE_ID, USER, PW);
+        service = new GpodnetService(AntennapodHttpClient.getHttpClient(), GpodnetService.DEFAULT_BASE_HOST);
     }
 
     private void authenticate() throws GpodnetServiceException {
-        service.login();
+        service.authenticate(USER, PW);
     }
 
     @Test
@@ -45,7 +43,7 @@ public class GPodnetServiceTest {
         authenticate();
         ArrayList<String> l = new ArrayList<>();
         l.add("http://bitsundso.de/feed");
-        service.uploadSubscriptions(DEVICE_ID, l);
+        service.uploadSubscriptions("radio", l);
     }
 
     @Test
@@ -54,7 +52,7 @@ public class GPodnetServiceTest {
         ArrayList<String> l = new ArrayList<>();
         l.add("http://bitsundso.de/feed");
         l.add("http://gamesundso.de/feed");
-        service.uploadSubscriptions(DEVICE_ID, l);
+        service.uploadSubscriptions("radio", l);
     }
 
     @Test
@@ -64,14 +62,14 @@ public class GPodnetServiceTest {
         List<String> subscriptions = Arrays.asList(URLS[0], URLS[1]);
         List<String> removed = singletonList(URLS[0]);
         List<String> added = Arrays.asList(URLS[2], URLS[3]);
-        service.uploadSubscriptions(DEVICE_ID, subscriptions);
-        service.uploadSubscriptionChanges(added, removed);
+        service.uploadSubscriptions("radio", subscriptions);
+        service.uploadChanges("radio", added, removed);
     }
 
     @Test
     public void testGetSubscriptionChanges() throws GpodnetServiceException {
         authenticate();
-        service.getSubscriptionChanges(1362322610L);
+        service.getSubscriptionChanges("radio", 1362322610L);
     }
 
     @Test
@@ -85,7 +83,7 @@ public class GPodnetServiceTest {
     public void testGetSubscriptionsOfDevice()
             throws GpodnetServiceException {
         authenticate();
-        service.getSubscriptionsOfDevice(DEVICE_ID);
+        service.getSubscriptionsOfDevice("radio");
     }
 
     @Test

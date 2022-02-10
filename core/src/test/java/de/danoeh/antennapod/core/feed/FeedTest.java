@@ -1,10 +1,9 @@
 package de.danoeh.antennapod.core.feed;
 
-import de.danoeh.antennapod.model.feed.Feed;
 import org.junit.Before;
 import org.junit.Test;
 
-import de.danoeh.antennapod.model.feed.SortOrder;
+import de.danoeh.antennapod.core.util.SortOrder;
 
 import static de.danoeh.antennapod.core.feed.FeedMother.anyFeed;
 import static org.junit.Assert.assertEquals;

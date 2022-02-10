@@ -1,7 +1,5 @@
 package de.danoeh.antennapod.core.feed;
 
-import de.danoeh.antennapod.model.feed.FeedFilter;
-import de.danoeh.antennapod.model.feed.FeedItem;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

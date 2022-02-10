@@ -1,12 +1,12 @@
 package de.danoeh.antennapod.adapter.actionbutton;
 
 import android.content.Context;
-import androidx.annotation.DrawableRes;
+import androidx.annotation.AttrRes;
 import androidx.annotation.StringRes;
 import android.view.View;
 
 import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.model.feed.FeedItem;
+import de.danoeh.antennapod.core.feed.FeedItem;
 import de.danoeh.antennapod.core.storage.DBWriter;
 
 public class MarkAsPlayedActionButton extends ItemActionButton {
@@ -22,9 +22,9 @@ public class MarkAsPlayedActionButton extends ItemActionButton {
     }
 
     @Override
-    @DrawableRes
+    @AttrRes
     public int getDrawable() {
-        return R.drawable.ic_check;
+        return R.attr.navigation_accept;
     }
 
     @Override

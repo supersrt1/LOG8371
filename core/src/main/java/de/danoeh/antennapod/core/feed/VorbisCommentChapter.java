@@ -3,7 +3,6 @@ package de.danoeh.antennapod.core.feed;
 import java.util.concurrent.TimeUnit;
 
 import de.danoeh.antennapod.core.util.vorbiscommentreader.VorbisCommentReaderException;
-import de.danoeh.antennapod.model.feed.Chapter;
 
 public class VorbisCommentChapter extends Chapter {
     public static final int CHAPTERTYPE_VORBISCOMMENT_CHAPTER = 3;
@@ -22,8 +21,8 @@ public class VorbisCommentChapter extends Chapter {
 
     @Override
     public String toString() {
-        return "VorbisCommentChapter [id=" + getId() + ", title=" + getTitle()
-                + ", link=" + getLink() + ", start=" + getStart() + "]";
+        return "VorbisCommentChapter [id=" + id + ", title=" + title
+                + ", link=" + link + ", start=" + start + "]";
     }
 
     public static long getStartTimeFromValue(String value)

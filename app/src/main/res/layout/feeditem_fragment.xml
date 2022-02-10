@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/content_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -127,7 +126,7 @@
                     android:layout_marginEnd="8dp"
                     android:layout_marginTop="12dp"
                     android:layout_marginBottom="12dp"
-                    tools:src="@drawable/ic_settings" />
+                    tools:src="@drawable/ic_settings_black" />
 
                 <TextView
                     android:textAppearance="@style/TextAppearance.AppCompat.Button"
@@ -155,7 +154,7 @@
                     android:layout_marginEnd="8dp"
                     android:layout_marginTop="12dp"
                     android:layout_marginBottom="12dp"
-                    tools:src="@drawable/ic_settings" />
+                    tools:src="@drawable/ic_settings_black" />
 
                 <TextView
                     android:textAppearance="@style/TextAppearance.AppCompat.Button"
@@ -186,8 +185,7 @@
     <de.danoeh.antennapod.view.NestedScrollableHost
         android:layout_below="@id/header"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:preferVertical="3">
+        android:layout_height="match_parent">
 
         <de.danoeh.antennapod.view.ShownotesWebView
             android:id="@+id/webvDescription"

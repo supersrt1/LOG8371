@@ -3,7 +3,6 @@ package de.danoeh.antennapod.core.feed;
 import android.text.TextUtils;
 import android.util.Log;
 import androidx.annotation.Nullable;
-import de.danoeh.antennapod.model.feed.Chapter;
 
 import java.util.List;
 
@@ -35,19 +34,19 @@ public class ChapterMerger {
                 Chapter chapterTarget = chapters2.get(i);
                 Chapter chapterOther = chapters1.get(i);
 
-                if (Math.abs(chapterTarget.getStart() - chapterOther.getStart()) > 1000) {
+                if (Math.abs(chapterTarget.start - chapterOther.start) > 1000) {
                     Log.e(TAG, "Chapter lists are too different. Cancelling merge.");
                     return chapters1;
                 }
 
-                if (TextUtils.isEmpty(chapterTarget.getImageUrl())) {
-                    chapterTarget.setImageUrl(chapterOther.getImageUrl());
+                if (TextUtils.isEmpty(chapterTarget.imageUrl)) {
+                    chapterTarget.imageUrl = chapterOther.imageUrl;
                 }
-                if (TextUtils.isEmpty(chapterTarget.getLink())) {
-                    chapterTarget.setLink(chapterOther.getLink());
+                if (TextUtils.isEmpty(chapterTarget.link)) {
+                    chapterTarget.link = chapterOther.link;
                 }
-                if (TextUtils.isEmpty(chapterTarget.getTitle())) {
-                    chapterTarget.setTitle(chapterOther.getTitle());
+                if (TextUtils.isEmpty(chapterTarget.title)) {
+                    chapterTarget.title = chapterOther.title;
                 }
             }
             return chapters2;

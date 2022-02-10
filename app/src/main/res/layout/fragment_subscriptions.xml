@@ -12,7 +12,6 @@
             android:theme="?attr/actionBarTheme"
             android:layout_alignParentTop="true"
             app:title="@string/subscriptions_label"
-            app:navigationIcon="?homeAsUpIndicator"
             android:id="@+id/toolbar"/>
 
     <TextView
@@ -65,5 +64,5 @@
             android:layout_alignParentEnd="true"
             android:layout_alignParentRight="true"
             android:contentDescription="@string/add_feed_label"
-            app:srcCompat="@drawable/ic_add"/>
+            app:srcCompat="@drawable/ic_add_white"/>
 </RelativeLayout>

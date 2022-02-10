@@ -8,15 +8,11 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-
 import androidx.fragment.app.Fragment;
-
 import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.core.storage.DBReader;
+import de.danoeh.antennapod.core.util.playback.Playable;
 import de.danoeh.antennapod.core.util.playback.PlaybackController;
 import de.danoeh.antennapod.core.util.playback.Timeline;
-import de.danoeh.antennapod.model.feed.FeedMedia;
-import de.danoeh.antennapod.model.playback.Playable;
 import de.danoeh.antennapod.view.ShownotesWebView;
 import io.reactivex.Maybe;
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -88,19 +84,12 @@ public class ItemDescriptionFragment extends Fragment {
         }
         webViewLoader = Maybe.<String>create(emitter -> {
             Playable media = controller.getMedia();
-            if (media == null) {
+            if (media != null) {
+                Timeline timeline = new Timeline(getActivity(), media);
+                emitter.onSuccess(timeline.processShownotes());
+            } else {
                 emitter.onComplete();
-                return;
             }
-            if (media instanceof FeedMedia) {
-                FeedMedia feedMedia = ((FeedMedia) media);
-                if (feedMedia.getItem() == null) {
-                    feedMedia.setItem(DBReader.getFeedItem(feedMedia.getItemId()));
-                }
-                DBReader.loadDescriptionOfFeedItem(feedMedia.getItem());
-            }
-            Timeline timeline = new Timeline(getActivity(), media.getDescription(), media.getDuration());
-            emitter.onSuccess(timeline.processShownotes());
         })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
@@ -145,16 +134,12 @@ public class ItemDescriptionFragment extends Fragment {
                     && id.equals(controller.getMedia().getIdentifier().toString())
                     && webvDescription != null) {
                 Log.d(TAG, "Restored scroll Position: " + scrollY);
-                webvDescription.scrollTo(webvDescription.getScrollX(), scrollY);
+                webvDescription.scrollTo(webvDescription.getScrollX(),
+                        scrollY);
                 return true;
             }
         }
         return false;
-    }
-
-    public void scrollToTop() {
-        webvDescription.scrollTo(0, 0);
-        savePreference();
     }
 
     @Override

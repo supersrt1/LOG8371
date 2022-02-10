@@ -1,23 +1,19 @@
 package de.danoeh.antennapod.activity;
 
-import android.content.Intent;
-import android.os.Build;
 import android.os.Bundle;
 import androidx.appcompat.app.ActionBar;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceFragmentCompat;
-
-import android.provider.Settings;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import com.bytehamster.lib.preferencesearch.SearchPreferenceResult;
 import com.bytehamster.lib.preferencesearch.SearchPreferenceResultListener;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
-import de.danoeh.antennapod.databinding.SettingsActivityBinding;
 import de.danoeh.antennapod.fragment.preferences.AutoDownloadPreferencesFragment;
 import de.danoeh.antennapod.fragment.preferences.GpodderPreferencesFragment;
 import de.danoeh.antennapod.fragment.preferences.ImportExportPreferencesFragment;
@@ -34,7 +30,6 @@ import de.danoeh.antennapod.fragment.preferences.UserInterfacePreferencesFragmen
  */
 public class PreferenceActivity extends AppCompatActivity implements SearchPreferenceResultListener {
     private static final String FRAGMENT_TAG = "tag_preferences";
-    public static final String OPEN_AUTO_DOWNLOAD_SETTINGS = "OpenAutoDownloadSettings";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,17 +41,16 @@ public class PreferenceActivity extends AppCompatActivity implements SearchPrefe
             ab.setDisplayHomeAsUpEnabled(true);
         }
 
-        final SettingsActivityBinding binding = SettingsActivityBinding.inflate(getLayoutInflater());
-        setContentView(binding.getRoot());
+        FrameLayout root = new FrameLayout(this);
+        root.setId(R.id.content);
+        root.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(root);
 
         if (getSupportFragmentManager().findFragmentByTag(FRAGMENT_TAG) == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.settingsContainer, new MainPreferencesFragment(), FRAGMENT_TAG)
+                    .replace(R.id.content, new MainPreferencesFragment(), FRAGMENT_TAG)
                     .commit();
-        }
-        Intent intent = getIntent();
-        if (intent.getBooleanExtra(OPEN_AUTO_DOWNLOAD_SETTINGS, false)) {
-            openScreen(R.xml.preferences_autodownload);
         }
     }
 
@@ -101,8 +95,6 @@ public class PreferenceActivity extends AppCompatActivity implements SearchPrefe
                 return R.string.gpodnet_main_label;
             case R.xml.preferences_notifications:
                 return R.string.notification_pref_fragment;
-            case R.xml.feed_settings:
-                return R.string.feed_settings_label;
             default:
                 return R.string.settings_label;
         }
@@ -110,17 +102,8 @@ public class PreferenceActivity extends AppCompatActivity implements SearchPrefe
 
     public PreferenceFragmentCompat openScreen(int screen) {
         PreferenceFragmentCompat fragment = getPreferenceScreen(screen);
-        if (screen == R.xml.preferences_notifications && Build.VERSION.SDK_INT >= 26) {
-            Intent intent = new Intent();
-            intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-            intent.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
-            startActivity(intent);
-        } else {
-            getSupportFragmentManager().beginTransaction().replace(R.id.settingsContainer, fragment)
-                    .addToBackStack(getString(getTitleOfPage(screen))).commit();
-        }
-
-
+        getSupportFragmentManager().beginTransaction().replace(R.id.content, fragment)
+                .addToBackStack(getString(getTitleOfPage(screen))).commit();
         return fragment;
     }
 
@@ -145,18 +128,7 @@ public class PreferenceActivity extends AppCompatActivity implements SearchPrefe
 
     @Override
     public void onSearchResultClicked(SearchPreferenceResult result) {
-        int screen = result.getResourceFile();
-        if (screen == R.xml.feed_settings) {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle(R.string.feed_settings_label);
-            builder.setMessage(R.string.pref_feed_settings_dialog_msg);
-            builder.setPositiveButton(android.R.string.ok, null);
-            builder.show();
-        } else if (screen == R.xml.preferences_notifications) {
-            openScreen(screen);
-        } else {
-            PreferenceFragmentCompat fragment = openScreen(result.getResourceFile());
-            result.highlight(fragment);
-        }
+        PreferenceFragmentCompat fragment = openScreen(result.getResourceFile());
+        result.highlight(fragment);
     }
 }

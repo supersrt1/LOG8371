@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import androidx.core.util.Consumer;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.core.util.playback.PlaybackController;
+import de.danoeh.antennapod.dialog.VariableSpeedDialog;
 
 public class PlaybackSpeedSeekBar extends FrameLayout {
     private SeekBar seekBar;
@@ -40,7 +41,7 @@ public class PlaybackSpeedSeekBar extends FrameLayout {
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (controller != null) {
+                if (controller != null && controller.canSetPlaybackSpeed()) {
                     float playbackSpeed = (progress + 10) / 20.0f;
                     controller.setPlaybackSpeed(playbackSpeed);
 
@@ -54,6 +55,9 @@ public class PlaybackSpeedSeekBar extends FrameLayout {
 
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
+                if (controller != null && !controller.canSetPlaybackSpeed()) {
+                    VariableSpeedDialog.showGetPluginDialog(getContext());
+                }
             }
 
             @Override
