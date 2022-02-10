@@ -15,10 +15,12 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -31,10 +33,6 @@ import de.danoeh.antennapod.core.dialog.DownloadRequestErrorDialogCreator;
 import de.danoeh.antennapod.core.event.DownloadEvent;
 import de.danoeh.antennapod.core.event.FeedListUpdateEvent;
 import de.danoeh.antennapod.core.event.PlayerStatusEvent;
-import de.danoeh.antennapod.core.feed.Feed;
-import de.danoeh.antennapod.core.feed.FeedItem;
-import de.danoeh.antennapod.core.feed.FeedPreferences;
-import de.danoeh.antennapod.core.feed.VolumeAdaptionSetting;
 import de.danoeh.antennapod.core.glide.ApGlideSettings;
 import de.danoeh.antennapod.core.glide.FastBlurTransformation;
 import de.danoeh.antennapod.core.preferences.PlaybackPreferences;
@@ -54,18 +52,22 @@ import de.danoeh.antennapod.core.syndication.handler.UnsupportedFeedtypeExceptio
 import de.danoeh.antennapod.core.util.DownloadError;
 import de.danoeh.antennapod.core.util.FileNameGenerator;
 import de.danoeh.antennapod.core.util.IntentUtils;
-import de.danoeh.antennapod.core.util.Optional;
 import de.danoeh.antennapod.core.util.StorageUtils;
 import de.danoeh.antennapod.core.util.URLChecker;
-import de.danoeh.antennapod.core.util.playback.RemoteMedia;
 import de.danoeh.antennapod.core.util.syndication.FeedDiscoverer;
 import de.danoeh.antennapod.core.util.syndication.HtmlToPlainText;
 import de.danoeh.antennapod.databinding.OnlinefeedviewActivityBinding;
 import de.danoeh.antennapod.dialog.AuthenticationDialog;
 import de.danoeh.antennapod.discovery.PodcastSearcherRegistry;
+import de.danoeh.antennapod.model.feed.Feed;
+import de.danoeh.antennapod.model.feed.FeedPreferences;
+import de.danoeh.antennapod.model.feed.VolumeAdaptionSetting;
+import de.danoeh.antennapod.model.playback.RemoteMedia;
+import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.observers.DisposableMaybeObserver;
 import io.reactivex.schedulers.Schedulers;
 import org.apache.commons.lang3.StringUtils;
 import org.greenrobot.eventbus.EventBus;
@@ -256,7 +258,8 @@ public class OnlineFeedViewActivity extends AppCompatActivity {
         url = URLChecker.prepareURL(url);
         feed = new Feed(url, null);
         if (username != null && password != null) {
-            feed.setPreferences(new FeedPreferences(0, false, FeedPreferences.AutoDeleteAction.GLOBAL, VolumeAdaptionSetting.OFF, username, password));
+            feed.setPreferences(new FeedPreferences(0, false, FeedPreferences.AutoDeleteAction.GLOBAL,
+                    VolumeAdaptionSetting.OFF, username, password));
         }
         String fileUrl = new File(getExternalCacheDir(),
                 FileNameGenerator.generateFileName(feed.getDownload_url())).toString();
@@ -320,33 +323,45 @@ public class OnlineFeedViewActivity extends AppCompatActivity {
         }
         Log.d(TAG, "Parsing feed");
 
-        parser = Observable.fromCallable(this::doParseFeed)
+        parser = Maybe.fromCallable(this::doParseFeed)
                 .subscribeOn(Schedulers.computation())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
-                    optionalResult -> {
-                        if (optionalResult.isPresent()) {
-                            FeedHandlerResult result = optionalResult.get();
-                            beforeShowFeedInformation(result.feed);
-                            showFeedInformation(result.feed, result.alternateFeedUrls);
-                        }
-                    }, error -> {
+                .subscribeWith(new DisposableMaybeObserver<FeedHandlerResult>() {
+                    @Override
+                    public void onSuccess(@NonNull FeedHandlerResult result) {
+                        showFeedInformation(result.feed, result.alternateFeedUrls);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        // Ignore null result: We showed the discovery dialog.
+                    }
+
+                    @Override
+                    public void onError(@NonNull Throwable error) {
                         showErrorDialog(error.getMessage(), "");
                         Log.d(TAG, "Feed parser exception: " + Log.getStackTraceString(error));
-                    });
+                    }
+                });
     }
 
-    @NonNull
-    private Optional<FeedHandlerResult> doParseFeed() throws Exception {
+    /**
+     * Try to parse the feed.
+     * @return  The FeedHandlerResult if successful.
+     *          Null if unsuccessful but we started another attempt.
+     * @throws Exception If unsuccessful but we do not know a resolution.
+     */
+    @Nullable
+    private FeedHandlerResult doParseFeed() throws Exception {
         FeedHandler handler = new FeedHandler();
         try {
-            return Optional.of(handler.parseFeed(feed));
+            return handler.parseFeed(feed);
         } catch (UnsupportedFeedtypeException e) {
             Log.d(TAG, "Unsupported feed type detected");
             if ("html".equalsIgnoreCase(e.getRootElement())) {
                 boolean dialogShown = showFeedDiscoveryDialog(new File(feed.getFile_url()), feed.getDownload_url());
                 if (dialogShown) {
-                    return Optional.empty();
+                    return null; // Should not display an error message
                 } else {
                     throw new UnsupportedFeedtypeException(getString(R.string.download_error_unsupported_type_html));
                 }
@@ -359,23 +374,6 @@ public class OnlineFeedViewActivity extends AppCompatActivity {
         } finally {
             boolean rc = new File(feed.getFile_url()).delete();
             Log.d(TAG, "Deleted feed source file. Result: " + rc);
-        }
-    }
-
-    /**
-     * Called after the feed has been downloaded and parsed and before showFeedInformation is called.
-     * This method is executed on a background thread
-     */
-    private void beforeShowFeedInformation(Feed feed) {
-        Log.d(TAG, "Removing HTML from feed description");
-
-        feed.setDescription(HtmlToPlainText.getPlainText(feed.getDescription()));
-
-        Log.d(TAG, "Removing HTML from shownotes");
-        if (feed.getItems() != null) {
-            for (FeedItem item : feed.getItems()) {
-                item.setDescription(HtmlToPlainText.getPlainText(item.getDescription()));
-            }
         }
     }
 
@@ -422,7 +420,7 @@ public class OnlineFeedViewActivity extends AppCompatActivity {
 
         viewBinding.titleLabel.setText(feed.getTitle());
         viewBinding.authorLabel.setText(feed.getAuthor());
-        description.setText(feed.getDescription());
+        description.setText(HtmlToPlainText.getPlainText(feed.getDescription()));
 
         viewBinding.subscribeButton.setOnClickListener(v -> {
             if (feedInFeedlist(feed)) {
@@ -479,8 +477,17 @@ public class OnlineFeedViewActivity extends AppCompatActivity {
             for (String url : alternateFeedUrls.keySet()) {
                 alternateUrlsTitleList.add(alternateFeedUrls.get(url));
             }
-            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, alternateUrlsTitleList);
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+            ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                    R.layout.alternate_urls_item, alternateUrlsTitleList) {
+                @Override
+                public View getDropDownView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+                    // reusing the old view causes a visual bug on Android <= 10
+                    return super.getDropDownView(position, null, parent);
+                }
+            };
+
+            adapter.setDropDownViewResource(R.layout.alternate_urls_dropdown_item);
             viewBinding.alternateUrlsSpinner.setAdapter(adapter);
             viewBinding.alternateUrlsSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override

@@ -12,6 +12,8 @@ import androidx.documentfile.provider.DocumentFile;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import de.danoeh.antennapod.core.preferences.PlaybackPreferences;
+import de.danoeh.antennapod.model.feed.Feed;
+import de.danoeh.antennapod.model.feed.FeedItem;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -204,13 +206,12 @@ public class LocalFeedUpdaterTest {
 
     @Test
     public void testGetImageUrl_PreferredImagesFilenames() {
-//        for (String filename : LocalFeedUpdater.PREFERRED_FEED_IMAGE_FILENAMES) {
-//            DocumentFile documentFolder = mockDocumentFolder(mockDocumentFile("audio.mp3", "audio/mp3"),
-//                    mockDocumentFile(filename, "image/jpeg")); // image MIME type doesn't matter
-//            String imageUrl = LocalFeedUpdater.getImageUrl(context, documentFolder);
-//            assertThat(imageUrl, endsWith(filename));
-//        }
-        assertEquals(0, 0);
+        for (String filename : LocalFeedUpdater.PREFERRED_FEED_IMAGE_FILENAMES) {
+            DocumentFile documentFolder = mockDocumentFolder(mockDocumentFile("audio.mp3", "audio/mp3"),
+                    mockDocumentFile(filename, "image/jpeg")); // image MIME type doesn't matter
+            String imageUrl = LocalFeedUpdater.getImageUrl(context, documentFolder);
+            assertThat(imageUrl, endsWith(filename));
+        }
     }
 
     @Test
