@@ -1,5 +1,3 @@
-Je teste un second push avec Jenkins
-
 # AntennaPod
 
 This is the official repository of AntennaPod, the easy-to-use, flexible and open-source podcast manager for Android.
