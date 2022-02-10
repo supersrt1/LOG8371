@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import com.google.android.material.snackbar.Snackbar;
@@ -98,25 +99,30 @@ public class BugReportActivity extends AppCompatActivity {
     private void exportLog() {
         try {
             File filename = new File(UserPreferences.getDataFolder(null), "full-logs.txt");
+            boolean success = filename.createNewFile();
+            if (!success) {
+                throw new IOException("Unable to create output file");
+            }
             String cmd = "logcat -d -f " + filename.getAbsolutePath();
             Runtime.getRuntime().exec(cmd);
             //share file
             try {
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/*");
+                Intent i = new Intent(Intent.ACTION_SEND);
+                i.setType("text/*");
                 String authString = getString(de.danoeh.antennapod.core.R.string.provider_authority);
                 Uri fileUri = FileProvider.getUriForFile(this, authString, filename);
-                intent.putExtra(Intent.EXTRA_STREAM, fileUri);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                String chooserTitle = getString(de.danoeh.antennapod.core.R.string.share_file_label);
-                Intent chooser = Intent.createChooser(intent, chooserTitle);
-                List<ResolveInfo> resInfos = getPackageManager()
-                        .queryIntentActivities(chooser, PackageManager.MATCH_DEFAULT_ONLY);
-                for (ResolveInfo resolveInfo : resInfos) {
-                    String packageName = resolveInfo.activityInfo.packageName;
-                    grantUriPermission(packageName, fileUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                i.putExtra(Intent.EXTRA_STREAM, fileUri);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
+                    PackageManager pm = getPackageManager();
+                    List<ResolveInfo> resInfos = pm.queryIntentActivities(i, PackageManager.MATCH_DEFAULT_ONLY);
+                    for (ResolveInfo resolveInfo : resInfos) {
+                        String packageName = resolveInfo.activityInfo.packageName;
+                        grantUriPermission(packageName, fileUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    }
                 }
-                startActivity(chooser);
+                String chooserTitle = getString(de.danoeh.antennapod.core.R.string.share_file_label);
+                startActivity(Intent.createChooser(i, chooserTitle));
             } catch (Exception e) {
                 e.printStackTrace();
                 int strResId = R.string.log_file_share_exception;

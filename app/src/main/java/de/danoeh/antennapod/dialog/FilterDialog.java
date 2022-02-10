@@ -52,10 +52,7 @@ public abstract class FilterDialog {
 
         for (String filterId : filterValues) {
             if (!TextUtils.isEmpty(filterId)) {
-                RadioButton button = layout.findViewWithTag(filterId);
-                if (button != null) {
-                    button.setChecked(true);
-                }
+                ((RadioButton) layout.findViewWithTag(filterId)).setChecked(true);
             }
         }
 

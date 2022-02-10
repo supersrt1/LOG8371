@@ -17,7 +17,7 @@ import de.danoeh.antennapod.core.util.NetworkUtils;
 import de.danoeh.antennapod.model.playback.RemoteMedia;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.core.service.playback.PlaybackService;
-import de.danoeh.antennapod.core.util.DateFormatter;
+import de.danoeh.antennapod.core.util.DateUtils;
 import de.danoeh.antennapod.model.playback.Playable;
 import de.danoeh.antennapod.core.util.playback.PlaybackServiceStarter;
 import de.danoeh.antennapod.core.util.syndication.HtmlToPlainText;
@@ -58,7 +58,7 @@ public class FeedItemlistDescriptionAdapter extends ArrayAdapter<FeedItem> {
         }
 
         holder.title.setText(item.getTitle());
-        holder.pubDate.setText(DateFormatter.formatAbbrev(getContext(), item.getPubDate()));
+        holder.pubDate.setText(DateUtils.formatAbbrev(getContext(), item.getPubDate()));
         if (item.getDescription() != null) {
             String description = HtmlToPlainText.getPlainText(item.getDescription())
                     .replaceAll("\n", " ")
@@ -95,7 +95,7 @@ public class FeedItemlistDescriptionAdapter extends ArrayAdapter<FeedItem> {
                 holder.preview.setVisibility(View.GONE);
                 holder.description.setTag(Boolean.FALSE);
             } else {
-                holder.description.setMaxLines(30);
+                holder.description.setMaxLines(2000);
                 holder.description.setTag(Boolean.TRUE);
 
                 holder.preview.setVisibility(item.getMedia() != null ? View.VISIBLE : View.GONE);

@@ -1,17 +1,12 @@
 package de.danoeh.antennapod.fragment;
 
-
-import android.content.Context;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.ProgressBar;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,10 +24,10 @@ import de.danoeh.antennapod.adapter.EpisodeItemListAdapter;
 import de.danoeh.antennapod.adapter.FeedSearchResultAdapter;
 import de.danoeh.antennapod.core.event.DownloadEvent;
 import de.danoeh.antennapod.core.event.DownloaderUpdate;
-import de.danoeh.antennapod.event.FeedItemEvent;
-import de.danoeh.antennapod.event.playback.PlaybackPositionEvent;
-import de.danoeh.antennapod.event.PlayerStatusEvent;
-import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
+import de.danoeh.antennapod.core.event.FeedItemEvent;
+import de.danoeh.antennapod.core.event.PlaybackPositionEvent;
+import de.danoeh.antennapod.core.event.PlayerStatusEvent;
+import de.danoeh.antennapod.core.event.UnreadItemsUpdateEvent;
 import de.danoeh.antennapod.model.feed.Feed;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.core.storage.FeedSearcher;
@@ -60,7 +55,6 @@ public class SearchFragment extends Fragment {
     private static final String ARG_QUERY = "query";
     private static final String ARG_FEED = "feed";
     private static final String ARG_FEED_NAME = "feedName";
-    private static final int SEARCH_DEBOUNCE_INTERVAL = 1500;
 
     private EpisodeItemListAdapter adapter;
     private FeedSearchResultAdapter adapterFeeds;
@@ -70,35 +64,27 @@ public class SearchFragment extends Fragment {
     private EpisodeItemListRecyclerView recyclerView;
     private List<FeedItem> results;
     private Chip chip;
-    private SearchView searchView;
-    private Handler automaticSearchDebouncer;
-    private long lastQueryChange = 0;
 
     /**
      * Create a new SearchFragment that searches all feeds.
      */
-    public static SearchFragment newInstance() {
+    public static SearchFragment newInstance(String query) {
+        if (query == null) {
+            query = "";
+        }
         SearchFragment fragment = new SearchFragment();
         Bundle args = new Bundle();
+        args.putString(ARG_QUERY, query);
         args.putLong(ARG_FEED, 0);
         fragment.setArguments(args);
         return fragment;
     }
 
     /**
-     * Create a new SearchFragment that searches all feeds with pre-defined query.
-     */
-    public static SearchFragment newInstance(String query) {
-        SearchFragment fragment = newInstance();
-        fragment.getArguments().putString(ARG_QUERY, query);
-        return fragment;
-    }
-
-    /**
      * Create a new SearchFragment that searches one specific feed.
      */
-    public static SearchFragment newInstance(long feed, String feedTitle) {
-        SearchFragment fragment = newInstance();
+    public static SearchFragment newInstance(String query, long feed, String feedTitle) {
+        SearchFragment fragment = newInstance(query);
         fragment.getArguments().putLong(ARG_FEED, feed);
         fragment.getArguments().putString(ARG_FEED_NAME, feedTitle);
         return fragment;
@@ -108,7 +94,12 @@ public class SearchFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setRetainInstance(true);
-        automaticSearchDebouncer = new Handler(Looper.getMainLooper());
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        search();
     }
 
     @Override
@@ -143,34 +134,12 @@ public class SearchFragment extends Fragment {
         emptyViewHandler.attachToRecyclerView(recyclerView);
         emptyViewHandler.setIcon(R.drawable.ic_search);
         emptyViewHandler.setTitle(R.string.search_status_no_results);
-        emptyViewHandler.setMessage(R.string.type_to_search);
         EventBus.getDefault().register(this);
 
         chip = layout.findViewById(R.id.feed_title_chip);
         chip.setOnCloseIconClickListener(v -> {
             getArguments().putLong(ARG_FEED, 0);
-            searchWithProgressBar();
-        });
-        chip.setVisibility((getArguments().getLong(ARG_FEED, 0) == 0) ? View.GONE : View.VISIBLE);
-        chip.setText(getArguments().getString(ARG_FEED_NAME, ""));
-        if (getArguments().getString(ARG_QUERY, null) != null) {
             search();
-        }
-        searchView.setOnQueryTextFocusChangeListener((view, hasFocus) -> {
-            if (hasFocus) {
-                showInputMethod(view.findFocus());
-            }
-        });
-        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
-                    InputMethodManager imm = (InputMethodManager)
-                            getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-                    imm.hideSoftInputFromWindow(recyclerView.getWindowToken(), 0);
-                }
-            }
         });
         return layout;
     }
@@ -188,30 +157,21 @@ public class SearchFragment extends Fragment {
 
         MenuItem item = toolbar.getMenu().findItem(R.id.action_search);
         item.expandActionView();
-        searchView = (SearchView) item.getActionView();
-        searchView.setQueryHint(getString(R.string.search_label));
-        searchView.requestFocus();
-        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+        final SearchView sv = (SearchView) item.getActionView();
+        sv.setQueryHint(getString(R.string.search_label));
+        sv.clearFocus();
+        sv.setQuery(getArguments().getString(ARG_QUERY), false);
+        sv.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String s) {
-                searchView.clearFocus();
-                searchWithProgressBar();
+                sv.clearFocus();
+                getArguments().putString(ARG_QUERY, s);
+                search();
                 return true;
             }
 
             @Override
             public boolean onQueryTextChange(String s) {
-                automaticSearchDebouncer.removeCallbacksAndMessages(null);
-                if (s.isEmpty() || s.endsWith(" ") || (lastQueryChange != 0
-                        && System.currentTimeMillis() > lastQueryChange + SEARCH_DEBOUNCE_INTERVAL)) {
-                    search();
-                } else {
-                    automaticSearchDebouncer.postDelayed(() -> {
-                        search();
-                        lastQueryChange = 0; // Don't search instantly with first symbol after some pause
-                    }, SEARCH_DEBOUNCE_INTERVAL / 2);
-                }
-                lastQueryChange = System.currentTimeMillis();
                 return false;
             }
         });
@@ -231,7 +191,7 @@ public class SearchFragment extends Fragment {
 
     @Override
     public boolean onContextItemSelected(@NonNull MenuItem item) {
-        FeedItem selectedItem = adapter.getLongPressedItem();
+        FeedItem selectedItem = adapter.getSelectedItem();
         if (selectedItem == null) {
             Log.i(TAG, "Selected item at current position was null, ignoring selection");
             return super.onContextItemSelected(item);
@@ -296,17 +256,12 @@ public class SearchFragment extends Fragment {
         search();
     }
 
-    private void searchWithProgressBar() {
-        progressBar.setVisibility(View.VISIBLE);
-        emptyViewHandler.hide();
-        search();
-    }
-
     private void search() {
         if (disposable != null) {
             disposable.dispose();
         }
-        chip.setVisibility((getArguments().getLong(ARG_FEED, 0) == 0) ? View.GONE : View.VISIBLE);
+        progressBar.setVisibility(View.VISIBLE);
+        emptyViewHandler.hide();
         disposable = Observable.fromCallable(this::performSearch)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
@@ -316,34 +271,22 @@ public class SearchFragment extends Fragment {
                     adapter.updateItems(results.first);
                     if (getArguments().getLong(ARG_FEED, 0) == 0) {
                         adapterFeeds.updateData(results.second);
+                        chip.setVisibility(View.GONE);
                     } else {
                         adapterFeeds.updateData(Collections.emptyList());
+                        chip.setText(getArguments().getString(ARG_FEED_NAME, ""));
                     }
-
-                    if (searchView.getQuery().toString().isEmpty()) {
-                        emptyViewHandler.setMessage(R.string.type_to_search);
-                    } else {
-                        emptyViewHandler.setMessage(getString(R.string.no_results_for_query, searchView.getQuery()));
-                    }
+                    String query = getArguments().getString(ARG_QUERY);
+                    emptyViewHandler.setMessage(getString(R.string.no_results_for_query, query));
                 }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
     @NonNull
     private Pair<List<FeedItem>, List<Feed>> performSearch() {
-        String query = searchView.getQuery().toString();
-        if (query.isEmpty()) {
-            return new Pair<>(Collections.emptyList(), Collections.emptyList());
-        }
+        String query = getArguments().getString(ARG_QUERY);
         long feed = getArguments().getLong(ARG_FEED);
         List<FeedItem> items = FeedSearcher.searchFeedItems(getContext(), query, feed);
         List<Feed> feeds = FeedSearcher.searchFeeds(getContext(), query);
         return new Pair<>(items, feeds);
-    }
-    
-    private void showInputMethod(View view) {
-        InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.showSoftInput(view, 0);
-        }
     }
 }

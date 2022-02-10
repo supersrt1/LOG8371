@@ -7,35 +7,32 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
-
 import com.joanzapata.iconify.Iconify;
-
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
 import de.danoeh.antennapod.adapter.CoverLoader;
 import de.danoeh.antennapod.adapter.actionbutton.ItemActionButton;
-import de.danoeh.antennapod.core.service.download.DownloadRequest;
-import de.danoeh.antennapod.core.service.download.DownloadService;
-import de.danoeh.antennapod.event.playback.PlaybackPositionEvent;
-import de.danoeh.antennapod.core.util.DateFormatter;
+import de.danoeh.antennapod.core.event.PlaybackPositionEvent;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.model.playback.MediaType;
 import de.danoeh.antennapod.core.feed.util.ImageResourceUtils;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
+import de.danoeh.antennapod.core.service.download.DownloadRequest;
 import de.danoeh.antennapod.core.service.playback.PlaybackService;
+import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.Converter;
+import de.danoeh.antennapod.core.util.DateUtils;
 import de.danoeh.antennapod.core.util.FeedItemUtil;
 import de.danoeh.antennapod.core.util.NetworkUtils;
-import de.danoeh.antennapod.ui.common.CircularProgressBar;
 import de.danoeh.antennapod.ui.common.ThemeUtils;
+import de.danoeh.antennapod.ui.common.CircularProgressBar;
 
 /**
  * Holds the view which shows FeedItems.
@@ -63,7 +60,6 @@ public class EpisodeItemViewHolder extends RecyclerView.ViewHolder {
     private final TextView separatorIcons;
     private final View leftPadding;
     public final CardView coverHolder;
-    public final CheckBox selectCheckBox;
 
     private final MainActivity activity;
     private FeedItem item;
@@ -95,7 +91,6 @@ public class EpisodeItemViewHolder extends RecyclerView.ViewHolder {
         coverHolder = itemView.findViewById(R.id.coverHolder);
         leftPadding = itemView.findViewById(R.id.left_padding);
         itemView.setTag(this);
-        selectCheckBox = itemView.findViewById(R.id.selectCheckBox);
     }
 
     public void bind(FeedItem item) {
@@ -103,14 +98,14 @@ public class EpisodeItemViewHolder extends RecyclerView.ViewHolder {
         placeholder.setText(item.getFeed().getTitle());
         title.setText(item.getTitle());
         leftPadding.setContentDescription(item.getTitle());
-        pubDate.setText(DateFormatter.formatAbbrev(activity, item.getPubDate()));
-        pubDate.setContentDescription(DateFormatter.formatForAccessibility(activity, item.getPubDate()));
+        pubDate.setText(DateUtils.formatAbbrev(activity, item.getPubDate()));
+        pubDate.setContentDescription(DateUtils.formatForAccessibility(activity, item.getPubDate()));
         isNew.setVisibility(item.isNew() ? View.VISIBLE : View.GONE);
         isFavorite.setVisibility(item.isTagged(FeedItem.TAG_FAVORITE) ? View.VISIBLE : View.GONE);
         isInQueue.setVisibility(item.isTagged(FeedItem.TAG_QUEUE) ? View.VISIBLE : View.GONE);
         container.setAlpha(item.isPlayed() ? 0.5f : 1.0f);
 
-        ItemActionButton actionButton = ItemActionButton.forItem(item);
+        ItemActionButton actionButton = ItemActionButton.forItem(item, true, true);
         actionButton.configure(secondaryActionButton, secondaryActionIcon, activity);
         secondaryActionButton.setFocusable(false);
 
@@ -145,8 +140,8 @@ public class EpisodeItemViewHolder extends RecyclerView.ViewHolder {
             itemView.setBackgroundResource(ThemeUtils.getDrawableFromAttr(activity, R.attr.selectableItemBackground));
         }
 
-        if (DownloadService.isDownloadingFile(media.getDownload_url())) {
-            final DownloadRequest downloadRequest = DownloadService.findRequest(media.getDownload_url());
+        if (DownloadRequester.getInstance().isDownloadingFile(media)) {
+            final DownloadRequest downloadRequest = DownloadRequester.getInstance().getRequestFor(media);
             float percent = 0.01f * downloadRequest.getProgressPercent();
             secondaryActionProgress.setPercentage(Math.max(percent, 0.01f), item);
         } else if (media.isDownloaded()) {

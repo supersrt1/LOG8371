@@ -4,7 +4,8 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-
+import androidx.core.util.ObjectsCompat;
+import de.danoeh.antennapod.model.feed.FeedItem;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -12,10 +13,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.TimeZone;
-
-import de.danoeh.antennapod.model.feed.FeedItem;
 
 public class EpisodeAction {
     private static final String TAG = "EpisodeAction";
@@ -27,7 +25,6 @@ public class EpisodeAction {
 
     private final String podcast;
     private final String episode;
-    private final String guid;
     private final Action action;
     private final Date timestamp;
     private final int started;
@@ -37,7 +34,6 @@ public class EpisodeAction {
     private EpisodeAction(Builder builder) {
         this.podcast = builder.podcast;
         this.episode = builder.episode;
-        this.guid = builder.guid;
         this.action = builder.action;
         this.timestamp = builder.timestamp;
         this.started = builder.started;
@@ -76,10 +72,6 @@ public class EpisodeAction {
                 e.printStackTrace();
             }
         }
-        String guid = object.optString("guid", null);
-        if (!TextUtils.isEmpty(guid)) {
-            builder.guid(guid);
-        }
         if (action == EpisodeAction.Action.PLAY) {
             int started = object.optInt("started", -1);
             int position = object.optInt("position", -1);
@@ -100,10 +92,6 @@ public class EpisodeAction {
 
     public String getEpisode() {
         return this.episode;
-    }
-
-    public String getGuid() {
-        return this.guid;
     }
 
     public Action getAction() {
@@ -155,21 +143,16 @@ public class EpisodeAction {
         }
 
         EpisodeAction that = (EpisodeAction) o;
-        return started == that.started
-                && position == that.position
-                && total == that.total
-                && action != that.action
-                && Objects.equals(podcast, that.podcast)
-                && Objects.equals(episode, that.episode)
-                && Objects.equals(timestamp, that.timestamp)
-                && Objects.equals(guid, that.guid);
+        return started == that.started && position == that.position && total == that.total && action != that.action
+                && ObjectsCompat.equals(podcast, that.podcast)
+                && ObjectsCompat.equals(episode, that.episode)
+                && ObjectsCompat.equals(timestamp, that.timestamp);
     }
 
     @Override
     public int hashCode() {
         int result = podcast != null ? podcast.hashCode() : 0;
         result = 31 * result + (episode != null ? episode.hashCode() : 0);
-        result = 31 * result + (guid != null ? guid.hashCode() : 0);
         result = 31 * result + (action != null ? action.hashCode() : 0);
         result = 31 * result + (timestamp != null ? timestamp.hashCode() : 0);
         result = 31 * result + started;
@@ -188,7 +171,6 @@ public class EpisodeAction {
         try {
             obj.putOpt("podcast", this.podcast);
             obj.putOpt("episode", this.episode);
-            obj.putOpt("guid", this.guid);
             obj.put("action", this.getActionString());
             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
             formatter.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -211,7 +193,6 @@ public class EpisodeAction {
         return "EpisodeAction{"
                 + "podcast='" + podcast + '\''
                 + ", episode='" + episode + '\''
-                + ", guid='" + guid + '\''
                 + ", action=" + action
                 + ", timestamp=" + timestamp
                 + ", started=" + started
@@ -236,11 +217,9 @@ public class EpisodeAction {
         private int started = -1;
         private int position = -1;
         private int total = -1;
-        private String guid;
 
         public Builder(FeedItem item, Action action) {
             this(item.getFeed().getDownload_url(), item.getMedia().getDownload_url(), action);
-            this.guid(item.getItemIdentifier());
         }
 
         public Builder(String podcast, String episode, Action action) {
@@ -251,11 +230,6 @@ public class EpisodeAction {
 
         public Builder timestamp(Date timestamp) {
             this.timestamp = timestamp;
-            return this;
-        }
-
-        public Builder guid(String guid) {
-            this.guid = guid;
             return this;
         }
 

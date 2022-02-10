@@ -2,7 +2,6 @@ package de.danoeh.antennapod.fragment;
 
 import android.os.Bundle;
 import android.util.Log;
-import android.view.ContextMenu;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -13,28 +12,25 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.Fragment;
-
-import com.google.android.material.snackbar.Snackbar;
-import com.leinardi.android.speeddial.SpeedDialView;
-
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
 import de.danoeh.antennapod.adapter.EpisodeItemListAdapter;
 import de.danoeh.antennapod.adapter.actionbutton.DeleteActionButton;
 import de.danoeh.antennapod.core.event.DownloadEvent;
 import de.danoeh.antennapod.core.event.DownloadLogEvent;
-import de.danoeh.antennapod.event.FeedItemEvent;
-import de.danoeh.antennapod.event.playback.PlaybackPositionEvent;
-import de.danoeh.antennapod.event.PlayerStatusEvent;
-import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
-import de.danoeh.antennapod.core.menuhandler.MenuItemUtils;
-import de.danoeh.antennapod.fragment.actions.EpisodeMultiSelectActionHandler;
+import de.danoeh.antennapod.core.event.FeedItemEvent;
+import de.danoeh.antennapod.core.event.PlaybackPositionEvent;
+import de.danoeh.antennapod.core.event.PlayerStatusEvent;
+import de.danoeh.antennapod.core.event.UnreadItemsUpdateEvent;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.core.service.download.DownloadService;
 import de.danoeh.antennapod.core.storage.DBReader;
+import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.FeedItemUtil;
 import de.danoeh.antennapod.core.util.download.AutoUpdateManager;
+import de.danoeh.antennapod.dialog.EpisodesApplyActionFragment;
 import de.danoeh.antennapod.menuhandler.FeedItemMenuHandler;
+import de.danoeh.antennapod.menuhandler.MenuItemUtils;
 import de.danoeh.antennapod.view.EmptyViewHandler;
 import de.danoeh.antennapod.view.EpisodeItemListRecyclerView;
 import de.danoeh.antennapod.view.viewholder.EpisodeItemViewHolder;
@@ -49,11 +45,13 @@ import org.greenrobot.eventbus.ThreadMode;
 import java.util.ArrayList;
 import java.util.List;
 
+import static de.danoeh.antennapod.dialog.EpisodesApplyActionFragment.ACTION_ADD_TO_QUEUE;
+import static de.danoeh.antennapod.dialog.EpisodesApplyActionFragment.ACTION_DELETE;
+
 /**
  * Displays all completed downloads and provides a button to delete them.
  */
-public class CompletedDownloadsFragment extends Fragment implements
-        EpisodeItemListAdapter.OnSelectModeListener {
+public class CompletedDownloadsFragment extends Fragment {
 
     private static final String TAG = CompletedDownloadsFragment.class.getSimpleName();
 
@@ -66,8 +64,6 @@ public class CompletedDownloadsFragment extends Fragment implements
 
     private boolean isUpdatingFeeds = false;
 
-    private SpeedDialView speedDialView;
-
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
@@ -78,38 +74,8 @@ public class CompletedDownloadsFragment extends Fragment implements
         recyclerView = root.findViewById(R.id.recyclerView);
         recyclerView.setRecycledViewPool(((MainActivity) getActivity()).getRecycledViewPool());
         adapter = new CompletedDownloadsListAdapter((MainActivity) getActivity());
-        adapter.setOnSelectModeListener(this);
         recyclerView.setAdapter(adapter);
         progressBar = root.findViewById(R.id.progLoading);
-
-        speedDialView = root.findViewById(R.id.fabSD);
-        speedDialView.setOverlayLayout(root.findViewById(R.id.fabSDOverlay));
-        speedDialView.inflate(R.menu.episodes_apply_action_speeddial);
-        speedDialView.removeActionItemById(R.id.download_batch);
-        speedDialView.removeActionItemById(R.id.mark_read_batch);
-        speedDialView.removeActionItemById(R.id.mark_unread_batch);
-        speedDialView.removeActionItemById(R.id.remove_from_queue_batch);
-        speedDialView.setOnChangeListener(new SpeedDialView.OnChangeListener() {
-            @Override
-            public boolean onMainActionSelected() {
-                return false;
-            }
-
-            @Override
-            public void onToggleChanged(boolean open) {
-                if (open && adapter.getSelectedCount() == 0) {
-                    ((MainActivity) getActivity()).showSnackbarAbovePlayer(R.string.no_items_selected,
-                            Snackbar.LENGTH_SHORT);
-                    speedDialView.close();
-                }
-            }
-        });
-        speedDialView.setOnActionSelectedListener(actionItem -> {
-            new EpisodeMultiSelectActionHandler(((MainActivity) getActivity()), adapter.getSelectedItems())
-                    .handleAction(actionItem.getId());
-            adapter.endSelectMode();
-            return true;
-        });
 
         addEmptyView();
         EventBus.getDefault().register(this);
@@ -119,7 +85,6 @@ public class CompletedDownloadsFragment extends Fragment implements
     @Override
     public void onDestroyView() {
         EventBus.getDefault().unregister(this);
-        adapter.endSelectMode();
         super.onDestroyView();
     }
 
@@ -140,12 +105,17 @@ public class CompletedDownloadsFragment extends Fragment implements
     @Override
     public void onPrepareOptionsMenu(@NonNull Menu menu) {
         menu.findItem(R.id.clear_logs_item).setVisible(false);
+        menu.findItem(R.id.episode_actions).setVisible(items.size() > 0);
         isUpdatingFeeds = MenuItemUtils.updateRefreshMenuItem(menu, R.id.refresh_item, updateRefreshMenuItemChecker);
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.refresh_item) {
+        if (item.getItemId() == R.id.episode_actions) {
+            ((MainActivity) requireActivity())
+                    .loadChildFragment(EpisodesApplyActionFragment.newInstance(items, ACTION_DELETE | ACTION_ADD_TO_QUEUE));
+            return true;
+        } else if (item.getItemId() == R.id.refresh_item) {
             AutoUpdateManager.runImmediate(requireContext());
             return true;
         }
@@ -161,19 +131,15 @@ public class CompletedDownloadsFragment extends Fragment implements
     }
 
     private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker =
-            () -> DownloadService.isRunning && DownloadService.isDownloadingFeeds();
+            () -> DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
 
     @Override
     public boolean onContextItemSelected(@NonNull MenuItem item) {
-        FeedItem selectedItem = adapter.getLongPressedItem();
+        FeedItem selectedItem = adapter.getSelectedItem();
         if (selectedItem == null) {
             Log.i(TAG, "Selected item at current position was null, ignoring selection");
             return super.onContextItemSelected(item);
         }
-        if (adapter.onContextItemSelected(item)) {
-            return true;
-        }
-
         return FeedItemMenuHandler.onMenuItemClicked(this, item.getItemId(), selectedItem);
     }
 
@@ -184,6 +150,7 @@ public class CompletedDownloadsFragment extends Fragment implements
         emptyView.setMessage(R.string.no_comp_downloads_label);
         emptyView.attachToRecyclerView(recyclerView);
     }
+
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEventMainThread(FeedItemEvent event) {
@@ -254,17 +221,6 @@ public class CompletedDownloadsFragment extends Fragment implements
                 }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
-    @Override
-    public void onStartSelectMode() {
-        speedDialView.setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void onEndSelectMode() {
-        speedDialView.close();
-        speedDialView.setVisibility(View.GONE);
-    }
-
     private static class CompletedDownloadsListAdapter extends EpisodeItemListAdapter {
 
         public CompletedDownloadsListAdapter(MainActivity mainActivity) {
@@ -273,18 +229,8 @@ public class CompletedDownloadsFragment extends Fragment implements
 
         @Override
         public void afterBindViewHolder(EpisodeItemViewHolder holder, int pos) {
-            if (!inActionMode()) {
-                DeleteActionButton actionButton = new DeleteActionButton(getItem(pos));
-                actionButton.configure(holder.secondaryActionButton, holder.secondaryActionIcon, getActivity());
-            }
-        }
-
-        @Override
-        public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-            super.onCreateContextMenu(menu, v, menuInfo);
-            if (!inActionMode()) {
-                menu.findItem(R.id.multi_select).setVisible(true);
-            }
+            DeleteActionButton actionButton = new DeleteActionButton(getItem(pos));
+            actionButton.configure(holder.secondaryActionButton, holder.secondaryActionIcon, getActivity());
         }
     }
 }

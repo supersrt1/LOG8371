@@ -11,6 +11,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -22,16 +23,17 @@ import de.danoeh.antennapod.adapter.DownloadLogAdapter;
 import de.danoeh.antennapod.core.event.DownloadEvent;
 import de.danoeh.antennapod.core.event.DownloadLogEvent;
 import de.danoeh.antennapod.core.event.DownloaderUpdate;
-import de.danoeh.antennapod.core.menuhandler.MenuItemUtils;
+import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.core.service.download.DownloadRequest;
 import de.danoeh.antennapod.core.service.download.DownloadService;
 import de.danoeh.antennapod.core.service.download.DownloadStatus;
 import de.danoeh.antennapod.core.service.download.Downloader;
 import de.danoeh.antennapod.core.storage.DBReader;
 import de.danoeh.antennapod.core.storage.DBWriter;
+import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.download.AutoUpdateManager;
+import de.danoeh.antennapod.menuhandler.MenuItemUtils;
 import de.danoeh.antennapod.model.feed.Feed;
-import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.view.EmptyViewHandler;
 import io.reactivex.Observable;
@@ -107,13 +109,15 @@ public class DownloadLogFragment extends ListFragment {
         Object item = adapter.getItem(position);
         if (item instanceof Downloader) {
             DownloadRequest downloadRequest = ((Downloader) item).getDownloadRequest();
-            DownloadService.cancel(getContext(), downloadRequest.getSource());
+            DownloadRequester.getInstance().cancelDownload(getActivity(), downloadRequest.getSource());
 
-            if (downloadRequest.getFeedfileType() == FeedMedia.FEEDFILETYPE_FEEDMEDIA) {
+            if (downloadRequest.getFeedfileType() == FeedMedia.FEEDFILETYPE_FEEDMEDIA
+                    && UserPreferences.isEnableAutodownload()) {
                 FeedMedia media = DBReader.getFeedMedia(downloadRequest.getFeedfileId());
-                FeedItem feedItem = media.getItem();
-                feedItem.disableAutoDownload();
-                DBWriter.setFeedItem(feedItem);
+                DBWriter.setFeedItemAutoDownload(media.getItem(), false);
+
+                ((MainActivity) getActivity()).showSnackbarAbovePlayer(
+                        R.string.download_canceled_autodownload_enabled_msg, Toast.LENGTH_SHORT);
             }
         } else if (item instanceof DownloadStatus) {
             DownloadStatus status = (DownloadStatus) item;
@@ -160,6 +164,7 @@ public class DownloadLogFragment extends ListFragment {
 
     @Override
     public void onPrepareOptionsMenu(@NonNull Menu menu) {
+        menu.findItem(R.id.episode_actions).setVisible(false);
         menu.findItem(R.id.clear_logs_item).setVisible(!downloadLog.isEmpty());
         isUpdatingFeeds = MenuItemUtils.updateRefreshMenuItem(menu, R.id.refresh_item, updateRefreshMenuItemChecker);
     }
@@ -195,7 +200,7 @@ public class DownloadLogFragment extends ListFragment {
     }
 
     private final MenuItemUtils.UpdateRefreshMenuItemChecker updateRefreshMenuItemChecker =
-            () -> DownloadService.isRunning && DownloadService.isDownloadingFeeds();
+            () -> DownloadService.isRunning && DownloadRequester.getInstance().isDownloadingFeeds();
 
     private void loadDownloadLog() {
         if (disposable != null) {

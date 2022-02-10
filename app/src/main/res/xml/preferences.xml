@@ -28,10 +28,10 @@
             android:icon="@drawable/ic_network" />
 
     <Preference
-            android:key="prefScreenSynchronization"
+            android:key="prefScreenGpodder"
             android:title="@string/synchronization_pref"
             android:summary="@string/synchronization_sum"
-            android:icon="@drawable/ic_cloud" />
+            android:icon="@drawable/ic_star" />
 
     <Preference
             android:key="prefScreenStorage"

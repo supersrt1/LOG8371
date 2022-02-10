@@ -1,10 +1,25 @@
 package de.danoeh.antennapod.net.sync.gpoddernet;
 
 import android.util.Log;
-
 import androidx.annotation.NonNull;
-
-import de.danoeh.antennapod.net.sync.HostnameParser;
+import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetDevice;
+import de.danoeh.antennapod.net.sync.model.EpisodeAction;
+import de.danoeh.antennapod.net.sync.model.EpisodeActionChanges;
+import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetEpisodeActionPostResponse;
+import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetPodcast;
+import de.danoeh.antennapod.net.sync.model.ISyncService;
+import de.danoeh.antennapod.net.sync.model.SubscriptionChanges;
+import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetTag;
+import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetUploadChangesResponse;
+import de.danoeh.antennapod.net.sync.model.SyncServiceException;
+import de.danoeh.antennapod.net.sync.model.UploadChangesResponse;
+import okhttp3.Credentials;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -20,28 +35,12 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 
-import de.danoeh.antennapod.net.sync.gpoddernet.mapper.ResponseMapper;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetDevice;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetEpisodeActionPostResponse;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetPodcast;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetTag;
-import de.danoeh.antennapod.net.sync.gpoddernet.model.GpodnetUploadChangesResponse;
-import de.danoeh.antennapod.net.sync.model.EpisodeAction;
-import de.danoeh.antennapod.net.sync.model.EpisodeActionChanges;
-import de.danoeh.antennapod.net.sync.model.ISyncService;
-import de.danoeh.antennapod.net.sync.model.SubscriptionChanges;
-import de.danoeh.antennapod.net.sync.model.SyncServiceException;
-import de.danoeh.antennapod.net.sync.model.UploadChangesResponse;
-import okhttp3.Credentials;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Communicates with the gpodder.net service.
@@ -62,16 +61,43 @@ public class GpodnetService implements ISyncService {
 
     private final OkHttpClient httpClient;
 
+    // split into schema, host and port - missing parts are null
+    private static Pattern urlsplit_regex = Pattern.compile("(?:(https?)://)?([^:]+)(?::(\\d+))?");
+
     public GpodnetService(OkHttpClient httpClient, String baseHosturl,
                           String deviceId, String username, String password)  {
         this.httpClient = httpClient;
         this.deviceId = deviceId;
         this.username = username;
         this.password = password;
-        HostnameParser hostname = new HostnameParser(baseHosturl == null ? DEFAULT_BASE_HOST : baseHosturl);
-        this.baseHost = hostname.host;
-        this.basePort = hostname.port;
-        this.baseScheme = hostname.scheme;
+
+        Matcher m = urlsplit_regex.matcher(baseHosturl);
+        if (m.matches()) {
+            this.baseScheme = m.group(1);
+            this.baseHost = m.group(2);
+            if (m.group(3) == null) {
+                this.basePort = -1;
+            } else {
+                this.basePort = Integer.parseInt(m.group(3));    // regex -> can only be digits
+            }
+        } else {
+            // URL does not match regex: use it anyway -> this will cause an exception on connect
+            this.baseScheme = "https";
+            this.baseHost = baseHosturl;
+            this.basePort = 443;
+        }
+
+        if (this.baseScheme == null) {      // assume https
+            this.baseScheme = "https";
+        }
+
+        if (this.baseScheme.equals("https") && this.basePort == -1) {
+            this.basePort = 443;
+        }
+
+        if (this.baseScheme.equals("http") && this.basePort == -1) {
+            this.basePort = 80;
+        }
     }
 
     private void requireLoggedIn() {
@@ -154,6 +180,37 @@ public class GpodnetService implements ISyncService {
             JSONArray jsonArray = new JSONArray(response);
             return readPodcastListFromJsonArray(jsonArray);
 
+        } catch (JSONException | MalformedURLException | URISyntaxException e) {
+            e.printStackTrace();
+            throw new GpodnetServiceException(e);
+        }
+    }
+
+    /**
+     * Returns a list of suggested podcasts for the user that is currently
+     * logged in.
+     * <p/>
+     * This method requires authentication.
+     *
+     * @param count The
+     *              number of elements that should be returned. Must be in range
+     *              1..100.
+     * @throws IllegalArgumentException              if count is out of range.
+     * @throws GpodnetServiceAuthenticationException If there is an authentication error.
+     */
+    public List<GpodnetPodcast> getSuggestions(int count) throws GpodnetServiceException {
+        if (count < 1 || count > 100) {
+            throw new IllegalArgumentException("Count must be in range 1..100");
+        }
+
+        try {
+            URL url = new URI(baseScheme, null, baseHost, basePort,
+                    String.format(Locale.US, "/suggestions/%d.json", count), null, null).toURL();
+            Request.Builder request = new Request.Builder().url(url);
+            String response = executeRequest(request);
+
+            JSONArray jsonArray = new JSONArray(response);
+            return readPodcastListFromJsonArray(jsonArray);
         } catch (JSONException | MalformedURLException | URISyntaxException e) {
             e.printStackTrace();
             throw new GpodnetServiceException(e);
@@ -321,6 +378,50 @@ public class GpodnetService implements ISyncService {
     }
 
     /**
+     * Returns the subscriptions of a specific device.
+     * <p/>
+     * This method requires authentication.
+     *
+     * @param deviceId The ID of the device whose subscriptions should be returned.
+     * @return A list of subscriptions in OPML format.
+     * @throws GpodnetServiceAuthenticationException If there is an authentication error.
+     */
+    public String getSubscriptionsOfDevice(@NonNull String deviceId) throws GpodnetServiceException {
+        requireLoggedIn();
+        try {
+            URL url = new URI(baseScheme, null, baseHost, basePort,
+                    String.format("/subscriptions/%s/%s.opml", username, deviceId), null, null).toURL();
+            Request.Builder request = new Request.Builder().url(url);
+            return executeRequest(request);
+        } catch (MalformedURLException | URISyntaxException e) {
+            e.printStackTrace();
+            throw new GpodnetServiceException(e);
+        }
+    }
+
+    /**
+     * Returns all subscriptions of a specific user.
+     * <p/>
+     * This method requires authentication.
+     *
+     * @return A list of subscriptions in OPML format.
+     * @throws IllegalArgumentException              If username is null.
+     * @throws GpodnetServiceAuthenticationException If there is an authentication error.
+     */
+    public String getSubscriptionsOfUser() throws GpodnetServiceException {
+        requireLoggedIn();
+        try {
+            URL url = new URI(baseScheme, null, baseHost, basePort,
+                    String.format("/subscriptions/%s.opml", username), null, null).toURL();
+            Request.Builder request = new Request.Builder().url(url);
+            return executeRequest(request);
+        } catch (MalformedURLException | URISyntaxException e) {
+            e.printStackTrace();
+            throw new GpodnetServiceException(e);
+        }
+    }
+
+    /**
      * Uploads the subscriptions of a specific device.
      * <p/>
      * This method requires authentication.
@@ -408,7 +509,7 @@ public class GpodnetService implements ISyncService {
 
             String response = executeRequest(request);
             JSONObject changes = new JSONObject(response);
-            return ResponseMapper.readSubscriptionChangesFromJsonObject(changes);
+            return readSubscriptionChangesFromJsonObject(changes);
         } catch (URISyntaxException e) {
             e.printStackTrace();
             throw new IllegalStateException(e);
@@ -489,7 +590,7 @@ public class GpodnetService implements ISyncService {
 
             String response = executeRequest(request);
             JSONObject json = new JSONObject(response);
-            return ResponseMapper.readEpisodeActionsFromJsonObject(json);
+            return readEpisodeActionsFromJsonObject(json);
         } catch (URISyntaxException e) {
             e.printStackTrace();
             throw new IllegalStateException(e);
@@ -499,6 +600,7 @@ public class GpodnetService implements ISyncService {
         }
 
     }
+
 
     /**
      * Logs in a specific user. This method must be called if any of the methods
@@ -588,13 +690,7 @@ public class GpodnetService implements ISyncService {
                         e.printStackTrace();
                     }
                 }
-                if (responseCode >= 500) {
-                    throw new GpodnetServiceBadStatusCodeException("Gpodder.net is currently unavailable (code "
-                            + responseCode + ")", responseCode);
-                } else {
-                    throw new GpodnetServiceBadStatusCodeException("Unable to connect to Gpodder.net (code "
-                            + responseCode + ": " + response.message() + ")", responseCode);
-                }
+                throw new GpodnetServiceBadStatusCodeException("Bad response code: " + responseCode, responseCode);
             }
         }
     }
@@ -666,6 +762,48 @@ public class GpodnetService implements ISyncService {
         String type = object.getString("type");
         int subscriptions = object.getInt("subscriptions");
         return new GpodnetDevice(id, caption, type, subscriptions);
+    }
+
+    private SubscriptionChanges readSubscriptionChangesFromJsonObject(@NonNull JSONObject object)
+            throws JSONException {
+
+        List<String> added = new LinkedList<>();
+        JSONArray jsonAdded = object.getJSONArray("add");
+        for (int i = 0; i < jsonAdded.length(); i++) {
+            String addedUrl = jsonAdded.getString(i);
+            // gpodder escapes colons unnecessarily
+            addedUrl = addedUrl.replace("%3A", ":");
+            added.add(addedUrl);
+        }
+
+        List<String> removed = new LinkedList<>();
+        JSONArray jsonRemoved = object.getJSONArray("remove");
+        for (int i = 0; i < jsonRemoved.length(); i++) {
+            String removedUrl = jsonRemoved.getString(i);
+            // gpodder escapes colons unnecessarily
+            removedUrl = removedUrl.replace("%3A", ":");
+            removed.add(removedUrl);
+        }
+
+        long timestamp = object.getLong("timestamp");
+        return new SubscriptionChanges(added, removed, timestamp);
+    }
+
+    private EpisodeActionChanges readEpisodeActionsFromJsonObject(@NonNull JSONObject object)
+            throws JSONException {
+
+        List<EpisodeAction> episodeActions = new ArrayList<>();
+
+        long timestamp = object.getLong("timestamp");
+        JSONArray jsonActions = object.getJSONArray("actions");
+        for (int i = 0; i < jsonActions.length(); i++) {
+            JSONObject jsonAction = jsonActions.getJSONObject(i);
+            EpisodeAction episodeAction = EpisodeAction.readFromJsonObject(jsonAction);
+            if (episodeAction != null) {
+                episodeActions.add(episodeAction);
+            }
+        }
+        return new EpisodeActionChanges(episodeActions, timestamp);
     }
 
     @Override

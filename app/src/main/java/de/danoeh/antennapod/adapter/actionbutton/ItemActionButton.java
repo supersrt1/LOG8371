@@ -7,10 +7,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 import android.view.View;
 
-import de.danoeh.antennapod.core.service.download.DownloadService;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
+import de.danoeh.antennapod.core.storage.DownloadRequester;
 import de.danoeh.antennapod.core.util.FeedItemUtil;
 
 public abstract class ItemActionButton {
@@ -33,13 +33,13 @@ public abstract class ItemActionButton {
     }
 
     @NonNull
-    public static ItemActionButton forItem(@NonNull FeedItem item) {
+    public static ItemActionButton forItem(@NonNull FeedItem item, boolean isInQueue, boolean allowStream) {
         final FeedMedia media = item.getMedia();
         if (media == null) {
             return new MarkAsPlayedActionButton(item);
         }
 
-        final boolean isDownloadingMedia = DownloadService.isDownloadingFile(media.getDownload_url());
+        final boolean isDownloadingMedia = DownloadRequester.getInstance().isDownloadingFile(media);
         if (FeedItemUtil.isCurrentlyPlaying(media)) {
             return new PauseActionButton(item);
         } else if (item.getFeed().isLocalFeed()) {
@@ -48,10 +48,13 @@ public abstract class ItemActionButton {
             return new PlayActionButton(item);
         } else if (isDownloadingMedia) {
             return new CancelDownloadActionButton(item);
-        } else if (UserPreferences.isStreamOverDownload()) {
+        } else if (UserPreferences.isStreamOverDownload() && allowStream) {
             return new StreamActionButton(item);
+        } else if (MobileDownloadHelper.userAllowedMobileDownloads()
+                || !MobileDownloadHelper.userChoseAddToQueue() || isInQueue) {
+            return new DownloadActionButton(item, isInQueue);
         } else {
-            return new DownloadActionButton(item);
+            return new AddToQueueActionButton(item);
         }
     }
 

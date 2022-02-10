@@ -45,15 +45,15 @@ public class DownloadServiceNotification {
      * Updates the contents of the service's notifications. Should be called
      * after setupNotificationBuilders.
      */
-    public Notification updateNotifications(List<Downloader> downloads) {
+    public Notification updateNotifications(int numDownloads, List<Downloader> downloads) {
         if (notificationCompatBuilder == null) {
             return null;
         }
 
         String contentTitle = context.getString(R.string.download_notification_title);
-        String downloadsLeft = (downloads.size() > 0)
-                ? context.getResources().getQuantityString(R.plurals.downloads_left, downloads.size(), downloads.size())
-                : context.getString(R.string.completing);
+        String downloadsLeft = (numDownloads > 0)
+                ? context.getResources().getQuantityString(R.plurals.downloads_left, numDownloads, numDownloads)
+                : context.getString(R.string.service_shutting_down);
         String bigText = compileNotificationString(downloads);
 
         notificationCompatBuilder.setContentTitle(contentTitle);

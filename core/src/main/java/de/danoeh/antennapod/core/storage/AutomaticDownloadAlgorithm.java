@@ -7,9 +7,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import de.danoeh.antennapod.core.service.download.DownloadRequest;
-import de.danoeh.antennapod.core.service.download.DownloadRequestCreator;
-import de.danoeh.antennapod.core.service.download.DownloadService;
+import de.danoeh.antennapod.model.feed.FeedFilter;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedPreferences;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
@@ -38,7 +36,7 @@ public class AutomaticDownloadAlgorithm {
         return () -> {
 
             // true if we should auto download based on network status
-            boolean networkShouldAutoDl = NetworkUtils.isAutoDownloadAllowed()
+            boolean networkShouldAutoDl = NetworkUtils.autodownloadNetworkAvailable()
                     && UserPreferences.isEnableAutodownload();
 
             // true if we should auto download based on power status
@@ -57,9 +55,8 @@ public class AutomaticDownloadAlgorithm {
                 candidates.addAll(queue);
                 for (FeedItem newItem : newItems) {
                     FeedPreferences feedPrefs = newItem.getFeed().getPreferences();
-                    if (feedPrefs.getAutoDownload()
-                            && !candidates.contains(newItem)
-                            && feedPrefs.getFilter().shouldAutoDownload(newItem)) {
+                    FeedFilter feedFilter = feedPrefs.getFilter();
+                    if (!candidates.contains(newItem) && feedFilter.shouldAutoDownload(newItem)) {
                         candidates.add(newItem);
                     }
                 }
@@ -68,7 +65,7 @@ public class AutomaticDownloadAlgorithm {
                 Iterator<FeedItem> it = candidates.iterator();
                 while (it.hasNext()) {
                     FeedItem item = it.next();
-                    if (!item.isAutoDownloadable(System.currentTimeMillis()) || FeedItemUtil.isPlaying(item.getMedia())
+                    if (!item.isAutoDownloadable() || FeedItemUtil.isPlaying(item.getMedia())
                             || item.getFeed().isLocalFeed()) {
                         it.remove();
                     }
@@ -89,17 +86,17 @@ public class AutomaticDownloadAlgorithm {
                     episodeSpaceLeft = episodeCacheSize - (downloadedEpisodes - deletedEpisodes);
                 }
 
-                List<FeedItem> itemsToDownload = candidates.subList(0, episodeSpaceLeft);
-                if (itemsToDownload.size() > 0) {
-                    Log.d(TAG, "Enqueueing " + itemsToDownload.size() + " items for download");
+                FeedItem[] itemsToDownload = candidates.subList(0, episodeSpaceLeft)
+                        .toArray(new FeedItem[episodeSpaceLeft]);
 
-                    List<DownloadRequest> requests = new ArrayList<>();
-                    for (FeedItem episode : itemsToDownload) {
-                        DownloadRequest.Builder request = DownloadRequestCreator.create(episode.getMedia());
-                        request.setInitiatedByUser(false);
-                        requests.add(request.build());
+                if (itemsToDownload.length > 0) {
+                    Log.d(TAG, "Enqueueing " + itemsToDownload.length + " items for download");
+
+                    try {
+                        DownloadRequester.getInstance().downloadMedia(false, context, false, itemsToDownload);
+                    } catch (DownloadRequestException e) {
+                        e.printStackTrace();
                     }
-                    DownloadService.download(context, false, requests.toArray(new DownloadRequest[0]));
                 }
             }
         };

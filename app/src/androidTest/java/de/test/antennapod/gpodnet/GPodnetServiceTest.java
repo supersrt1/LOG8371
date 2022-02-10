@@ -20,7 +20,7 @@ import static java.util.Collections.singletonList;
 /**
  * Test class for GpodnetService
  */
-@Ignore("Needs valid credentials to run")
+@Ignore
 @RunWith(AndroidJUnit4.class)
 public class GPodnetServiceTest {
 
@@ -75,6 +75,20 @@ public class GPodnetServiceTest {
     }
 
     @Test
+    public void testGetSubscriptionsOfUser()
+            throws GpodnetServiceException {
+        authenticate();
+        service.getSubscriptionsOfUser();
+    }
+
+    @Test
+    public void testGetSubscriptionsOfDevice()
+            throws GpodnetServiceException {
+        authenticate();
+        service.getSubscriptionsOfDevice(DEVICE_ID);
+    }
+
+    @Test
     public void testConfigureDevices() throws GpodnetServiceException {
         authenticate();
         service.configureDevice("foo", "This is an updated caption",  GpodnetDevice.DeviceType.LAPTOP);
@@ -84,6 +98,12 @@ public class GPodnetServiceTest {
     public void testGetDevices() throws GpodnetServiceException {
         authenticate();
         service.getDevices();
+    }
+
+    @Test
+    public void testGetSuggestions() throws GpodnetServiceException {
+        authenticate();
+        service.getSuggestions(10);
     }
 
     @Test

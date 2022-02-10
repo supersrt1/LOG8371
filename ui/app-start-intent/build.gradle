@@ -3,4 +3,5 @@ apply from: "../../common.gradle"
 
 dependencies {
     annotationProcessor "androidx.annotation:annotation:$annotationVersion"
+    implementation "androidx.appcompat:appcompat:$appcompatVersion"
 }

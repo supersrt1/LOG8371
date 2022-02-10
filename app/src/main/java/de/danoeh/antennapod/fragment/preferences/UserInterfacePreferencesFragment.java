@@ -5,13 +5,12 @@ import android.os.Build;
 import android.os.Bundle;
 import com.google.android.material.snackbar.Snackbar;
 import androidx.appcompat.app.AlertDialog;
-import androidx.core.app.ActivityCompat;
 import androidx.preference.PreferenceFragmentCompat;
 import android.widget.ListView;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.PreferenceActivity;
-import de.danoeh.antennapod.event.PlayerStatusEvent;
-import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
+import de.danoeh.antennapod.core.event.PlayerStatusEvent;
+import de.danoeh.antennapod.core.event.UnreadItemsUpdateEvent;
 import de.danoeh.antennapod.core.preferences.UserPreferences;
 import de.danoeh.antennapod.dialog.SubscriptionsFilterDialog;
 import de.danoeh.antennapod.dialog.FeedSortDialog;
@@ -22,7 +21,6 @@ import org.greenrobot.eventbus.EventBus;
 import java.util.List;
 
 public class UserInterfacePreferencesFragment extends PreferenceFragmentCompat {
-    private static final String PREF_SWIPE = "prefSwipe";
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -40,7 +38,7 @@ public class UserInterfacePreferencesFragment extends PreferenceFragmentCompat {
         findPreference(UserPreferences.PREF_THEME)
                 .setOnPreferenceChangeListener(
                         (preference, newValue) -> {
-                            ActivityCompat.recreate(getActivity());
+                            getActivity().recreate();
                             return true;
                         });
 
@@ -100,11 +98,6 @@ public class UserInterfacePreferencesFragment extends PreferenceFragmentCompat {
                     FeedSortDialog.showDialog(requireContext());
                     return true;
                 }));
-        findPreference(PREF_SWIPE)
-                .setOnPreferenceClickListener(preference -> {
-                    ((PreferenceActivity) getActivity()).openScreen(R.xml.preferences_swipe);
-                    return true;
-                });
 
         if (Build.VERSION.SDK_INT >= 26) {
             findPreference(UserPreferences.PREF_EXPANDED_NOTIFICATION).setVisible(false);

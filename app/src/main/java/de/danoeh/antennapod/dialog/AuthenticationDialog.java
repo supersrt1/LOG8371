@@ -40,7 +40,8 @@ public abstract class AuthenticationDialog extends AlertDialog.Builder {
         });
 
         setOnCancelListener(dialog -> onCancelled());
-        setNegativeButton(R.string.cancel_label, (dialog, which) -> onCancelled());
+        setOnDismissListener(dialog -> onCancelled());
+        setNegativeButton(R.string.cancel_label, null);
         setPositiveButton(R.string.confirm_label, (dialog, which)
                 -> onConfirmed(viewBinding.usernameEditText.getText().toString(),
                         viewBinding.passwordEditText.getText().toString()));
